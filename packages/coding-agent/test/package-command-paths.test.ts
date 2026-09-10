@@ -221,49 +221,6 @@ describe("package commands", () => {
 		}
 	});
 
-	it("does not prompt or ask extensions for project trust during update", async () => {
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
-		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProjectTrust: "always" }));
-		writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ packages: ["npm:fake-package"] }));
-		let projectTrustCalled = false;
-		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-		try {
-			await expect(
-				main(["update", "--extensions"], {
-					extensionFactories: [
-						(pi) => {
-							pi.on("project_trust", () => {
-								projectTrustCalled = true;
-								return { trusted: "yes" };
-							});
-						},
-					],
-				}),
-			).resolves.toBeUndefined();
-
-			expect(projectTrustCalled).toBe(false);
-			expect(process.exitCode).toBeUndefined();
-		} finally {
-			logSpy.mockRestore();
-		}
-	});
-
-	it("uses saved project trust during update without running configured registry commands", async () => {
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
-		writeFileSync(join(projectDir, ".pi", "settings.json"), JSON.stringify({ packages: ["npm:fake-package"] }));
-		new ProjectTrustStore(agentDir).set(projectDir, true);
-		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-		try {
-			await expect(main(["update", "--extensions"])).resolves.toBeUndefined();
-
-			expect(process.exitCode).toBeUndefined();
-		} finally {
-			logSpy.mockRestore();
-		}
-	});
-
 	it("lets trust.json override default project trust", async () => {
 		mkdirSync(join(projectDir, ".pi"), { recursive: true });
 		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ defaultProjectTrust: "always" }));
@@ -350,7 +307,7 @@ describe("package commands", () => {
 		expect(process.exit).not.toHaveBeenCalled();
 	});
 
-	it("rejects update --models combined with another update target", async () => {
+	it("rejects unsupported update targets", async () => {
 		const create = vi.spyOn(ModelRuntime, "create");
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -358,7 +315,7 @@ describe("package commands", () => {
 
 		expect(create).not.toHaveBeenCalled();
 		expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
-			"--models cannot be combined with --self",
+			'Unknown option --self for "update".',
 		);
 		expect(process.exitCode).toBe(1);
 	});
@@ -425,43 +382,6 @@ describe("package commands", () => {
 		}
 	});
 
-	it("disables self-update without checking the network", async () => {
-		const fetchMock = vi.fn();
-		vi.stubGlobal("fetch", fetchMock);
-		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-		try {
-			await expect(runPackageCommandDirectly(["update", "--self"])).resolves.toBeUndefined();
-
-			expect(fetchMock).not.toHaveBeenCalled();
-			expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
-				"pi self-update is disabled in this fork.",
-			);
-			expect(process.exitCode).toBe(1);
-		} finally {
-			errorSpy.mockRestore();
-		}
-	});
-
-	it("updates extensions before reporting the disabled self-update policy for --all", async () => {
-		writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ packages: ["npm:legacy-package"] }));
-		const fetchMock = vi.fn();
-		vi.stubGlobal("fetch", fetchMock);
-		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-		try {
-			await expect(runPackageCommandDirectly(["update", "--all"])).resolves.toBeUndefined();
-
-			expect(fetchMock).not.toHaveBeenCalled();
-			expect(errorSpy.mock.calls.map(([message]) => String(message)).join("\n")).toContain(
-				"Pi never downloads or installs update code. Use a reviewed local build.",
-			);
-			expect(process.exitCode).toBe(1);
-		} finally {
-			errorSpy.mockRestore();
-		}
-	});
-
 	it("rejects registry package installs without modifying settings", async () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -491,30 +411,6 @@ describe("package commands", () => {
 			expect(process.exitCode).toBe(1);
 		} finally {
 			errorSpy.mockRestore();
-		}
-	});
-
-	it("suggests the configured source when update input omits the npm prefix", async () => {
-		const settingsPath = join(agentDir, "settings.json");
-		writeFileSync(settingsPath, JSON.stringify({ packages: ["npm:pi-formatter"] }, null, 2));
-
-		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-		try {
-			await expect(main(["update", "pi-formatter"])).resolves.toBeUndefined();
-
-			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			expect(stderr).toContain("Did you mean npm:pi-formatter?");
-			expect(stdout).not.toContain("Updated pi-formatter");
-			expect(process.exitCode).toBe(1);
-
-			const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as { packages?: string[] };
-			expect(settings.packages).toContain("npm:pi-formatter");
-		} finally {
-			errorSpy.mockRestore();
-			logSpy.mockRestore();
 		}
 	});
 });

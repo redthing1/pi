@@ -110,14 +110,33 @@ function checkFiles(files, allowed, context) {
 	}
 }
 
+function runtimeSourceFiles(directory, packageJson, sourceFiles) {
+	if (packageJson.private) return [];
+	const configPath = join(directory, "tsconfig.build.json");
+	if (!existsSync(configPath)) return sourceFiles;
+	const config = ts.readConfigFile(configPath, ts.sys.readFile);
+	if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
+	const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, directory);
+	if (parsed.errors.length > 0) {
+		throw new Error(parsed.errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
+	}
+	const roots = new Set(parsed.fileNames);
+	return sourceFiles.filter((file) => roots.has(file));
+}
+
 const extensionRoot = join(root, "packages", "coding-agent", "examples", "extensions");
 for (const directory of packageDirectories) {
 	const packageJson = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
 	const sourceDirectory = join(directory, "src");
-	checkFiles(walk(sourceDirectory, true), declaredDependencies(packageJson, false), `${packageJson.name} runtime`);
+	const sourceFiles = walk(sourceDirectory, true);
+	const runtimeFiles = runtimeSourceFiles(directory, packageJson, sourceFiles);
+	checkFiles(runtimeFiles, declaredDependencies(packageJson, false), `${packageJson.name} runtime`);
 
 	const sourcePrefix = `${sourceDirectory}${sep}`;
-	const developmentFiles = walk(directory, true).filter((file) => !file.startsWith(sourcePrefix));
+	const runtimeFileSet = new Set(runtimeFiles);
+	const developmentFiles = walk(directory, true).filter(
+		(file) => !file.startsWith(sourcePrefix) || !runtimeFileSet.has(file),
+	);
 	const hostProvided = directory.startsWith(`${extensionRoot}${sep}`) ? hostProvidedExtensionPackages : [];
 	const rootWorkspaces = directory === root ? workspaceNames : [];
 	checkFiles(

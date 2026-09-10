@@ -32,19 +32,12 @@ export interface ResolvedPaths {
 
 export interface ProgressEvent {
 	type: "start" | "progress" | "complete" | "error";
-	action: "install" | "remove" | "update";
+	action: "install" | "remove";
 	source: string;
 	message?: string;
 }
 
 export type ProgressCallback = (event: ProgressEvent) => void;
-
-export interface PackageUpdate {
-	source: string;
-	displayName: string;
-	type: "npm" | "git";
-	scope: Exclude<SourceScope, "temporary">;
-}
 
 export interface ConfiguredPackage {
 	source: string;
@@ -59,7 +52,6 @@ export interface PackageManager {
 	installAndPersist(source: string, options?: { local?: boolean }): Promise<void>;
 	remove(source: string, options?: { local?: boolean }): Promise<void>;
 	removeAndPersist(source: string, options?: { local?: boolean }): Promise<boolean>;
-	update(source?: string): Promise<void>;
 	listConfiguredPackages(): ConfiguredPackage[];
 	resolveExtensionSources(
 		sources: string[],
@@ -958,41 +950,6 @@ export class DefaultPackageManager implements PackageManager {
 		return this.removeSourceFromSettings(source, options);
 	}
 
-	async update(source?: string): Promise<void> {
-		const globalSettings = this.settingsManager.getGlobalSettings();
-		const projectSettings = this.settingsManager.getProjectSettings();
-		const identity = source ? this.getPackageIdentity(source) : undefined;
-		if (source) {
-			this.assertInstallablePackageSource(this.parseSource(source), source);
-		}
-		let matched = false;
-
-		for (const pkg of globalSettings.packages ?? []) {
-			const sourceStr = typeof pkg === "string" ? pkg : pkg.source;
-			if (identity && this.getPackageIdentity(sourceStr, "user") !== identity) continue;
-			matched = true;
-		}
-		for (const pkg of projectSettings.packages ?? []) {
-			const sourceStr = typeof pkg === "string" ? pkg : pkg.source;
-			if (identity && this.getPackageIdentity(sourceStr, "project") !== identity) continue;
-			matched = true;
-		}
-
-		if (source && !matched) {
-			throw new Error(
-				this.buildNoMatchingPackageMessage(source, [
-					...(globalSettings.packages ?? []),
-					...(projectSettings.packages ?? []),
-				]),
-			);
-		}
-	}
-
-	async checkForAvailableUpdates(): Promise<PackageUpdate[]> {
-		// Package availability checks must never cause network access.
-		return [];
-	}
-
 	private async resolvePackageSources(
 		sources: Array<{ pkg: PackageSource; scope: SourceScope }>,
 		accumulator: ResourceAccumulator,
@@ -1092,31 +1049,6 @@ export class DefaultPackageManager implements PackageManager {
 		}
 		const baseDir = this.getBaseDirForScope(scope);
 		return `local:${this.resolvePathFromBase(parsed.path, baseDir)}`;
-	}
-
-	private buildNoMatchingPackageMessage(source: string, configuredPackages: PackageSource[]): string {
-		const suggestion = this.findSuggestedConfiguredSource(source, configuredPackages);
-		if (!suggestion) {
-			return `No matching package found for ${source}`;
-		}
-		return `No matching package found for ${source}. Did you mean ${suggestion}?`;
-	}
-
-	private findSuggestedConfiguredSource(source: string, configuredPackages: PackageSource[]): string | undefined {
-		const trimmedSource = source.trim();
-		const suggestions = new Set<string>();
-
-		for (const pkg of configuredPackages) {
-			const sourceStr = this.getPackageSourceString(pkg);
-			const parsed = this.parseSource(sourceStr);
-			if (parsed.type === "npm") {
-				if (trimmedSource === parsed.name || trimmedSource === parsed.spec) {
-					suggestions.add(sourceStr);
-				}
-			}
-		}
-
-		return suggestions.values().next().value;
 	}
 
 	private packageSourcesMatch(existing: PackageSource, inputSource: string, scope: SourceScope): boolean {

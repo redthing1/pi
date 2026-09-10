@@ -1646,27 +1646,6 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 	});
 
 	describe("package network safety", () => {
-		it("should reject explicit registry updates", async () => {
-			settingsManager.setProjectPackages(["npm:example@^1.0.0"]);
-
-			await expect(packageManager.update("npm:example")).rejects.toThrow(
-				"Registry package installs are disabled in this fork",
-			);
-		});
-
-		it("should leave configured registry and git sources inert during update", async () => {
-			settingsManager.setPackages(["npm:user-package", "git:github.com/example/user-repo"]);
-			settingsManager.setProjectPackages(["npm:project-package"]);
-
-			await packageManager.update();
-
-			expect(settingsManager.getGlobalSettings().packages).toEqual([
-				"npm:user-package",
-				"git:github.com/example/user-repo",
-			]);
-			expect(settingsManager.getProjectSettings().packages).toEqual(["npm:project-package"]);
-		});
-
 		it("should never hydrate missing configured package sources during resolve", async () => {
 			settingsManager.setProjectPackages(["npm:missing-package", "git:github.com/example/missing-repo"]);
 
@@ -1675,12 +1654,6 @@ export default function(api) { api.registerTool({ name: "test", description: "te
 			expect([...result.extensions, ...result.skills, ...result.prompts, ...result.themes]).not.toContainEqual(
 				expect.objectContaining({ metadata: expect.objectContaining({ origin: "package" }) }),
 			);
-		});
-
-		it("should not check package updates in the background", async () => {
-			settingsManager.setPackages(["npm:example", "git:github.com/example/repo"]);
-
-			await expect(packageManager.checkForAvailableUpdates()).resolves.toEqual([]);
 		});
 
 		it("should reject temporary git sources", async () => {

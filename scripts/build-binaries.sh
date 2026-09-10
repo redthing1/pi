@@ -3,14 +3,14 @@
 # Build pi binaries for all platforms locally.
 #
 # Usage:
-#   ./scripts/build-binaries.sh [--skip-install] [--skip-deps] [--skip-build] [--platform <platform>] [--out <dir>]
+#   ./scripts/build-binaries.sh [--skip-install] [--skip-build] [--offline-model-data] [--platform <platform>] [--out <dir>]
 #
 # Options:
-#   --skip-install      Skip bun install
-#   --skip-deps         Skip installing cross-platform dependencies
-#   --skip-build        Skip bun run build
-#   --platform <name>   Build only for specified platform (darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, windows-arm64)
-#   --out <dir>         Output directory (default: packages/coding-agent/binaries)
+#   --skip-install       Skip bun install
+#   --skip-build         Skip the package build
+#   --offline-model-data Build with bundled model data instead of refreshing it
+#   --platform <name>    Build only for specified platform (darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, windows-arm64)
+#   --out <dir>          Output directory (default: packages/coding-agent/binaries)
 #
 # Output:
 #   packages/coding-agent/binaries/
@@ -26,8 +26,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 SKIP_INSTALL=false
-SKIP_DEPS=false
 SKIP_BUILD=false
+OFFLINE_MODEL_DATA=false
 PLATFORM=""
 OUTPUT_DIR=""
 
@@ -37,12 +37,12 @@ while [[ $# -gt 0 ]]; do
             SKIP_INSTALL=true
             shift
             ;;
-        --skip-deps)
-            SKIP_DEPS=true
-            shift
-            ;;
         --skip-build)
             SKIP_BUILD=true
+            shift
+            ;;
+        --offline-model-data)
+            OFFLINE_MODEL_DATA=true
             shift
             ;;
         --platform)
@@ -87,18 +87,14 @@ else
     echo "==> Skipping bun install (--skip-install)"
 fi
 
-if [[ "$SKIP_DEPS" == "false" ]]; then
-    echo "==> Installing cross-platform native bindings..."
-    # Hydrate every reviewed optional platform package directly from bun.lock.
-    # This avoids mutating manifests or resolving a separate dependency graph.
-    bun install --frozen-lockfile --ignore-scripts --os='*' --cpu='*'
-else
-    echo "==> Skipping cross-platform native bindings (--skip-deps)"
-fi
-
 if [[ "$SKIP_BUILD" == "false" ]]; then
-    echo "==> Building all packages..."
-    bun run build
+    if [[ "$OFFLINE_MODEL_DATA" == "true" ]]; then
+        echo "==> Building all packages with bundled model data..."
+        bun run build:offline
+    else
+        echo "==> Building all packages..."
+        bun run build
+    fi
 else
     echo "==> Skipping package build (--skip-build)"
 fi
@@ -116,35 +112,6 @@ if [[ -n "$PLATFORM" ]]; then
 else
     PLATFORMS=(darwin-arm64 darwin-x64 linux-x64 linux-arm64 windows-x64 windows-arm64)
 fi
-
-set_clipboard_target() {
-    case "$1" in
-        darwin-arm64)
-            clipboard_native_package="clipboard-darwin-arm64"
-            clipboard_native_file="clipboard.darwin-arm64.node"
-            ;;
-        darwin-x64)
-            clipboard_native_package="clipboard-darwin-x64"
-            clipboard_native_file="clipboard.darwin-x64.node"
-            ;;
-        linux-x64)
-            clipboard_native_package="clipboard-linux-x64-gnu"
-            clipboard_native_file="clipboard.linux-x64-gnu.node"
-            ;;
-        linux-arm64)
-            clipboard_native_package="clipboard-linux-arm64-gnu"
-            clipboard_native_file="clipboard.linux-arm64-gnu.node"
-            ;;
-        windows-x64)
-            clipboard_native_package="clipboard-win32-x64-msvc"
-            clipboard_native_file="clipboard.win32-x64-msvc.node"
-            ;;
-        windows-arm64)
-            clipboard_native_package="clipboard-win32-arm64-msvc"
-            clipboard_native_file="clipboard.win32-arm64-msvc.node"
-            ;;
-    esac
-}
 
 for platform in "${PLATFORMS[@]}"; do
     echo "Building for $platform..."
@@ -173,7 +140,7 @@ for platform in "${PLATFORMS[@]}"; do
     cp package.json "$OUTPUT_DIR/$platform/"
     cp README.md "$OUTPUT_DIR/$platform/"
     cp CHANGELOG.md "$OUTPUT_DIR/$platform/"
-    cp ../../node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm "$OUTPUT_DIR/$platform/"
+    cp node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm "$OUTPUT_DIR/$platform/"
     mkdir -p "$OUTPUT_DIR/$platform/theme"
     cp dist/modes/interactive/theme/*.json "$OUTPUT_DIR/$platform/theme/"
     mkdir -p "$OUTPUT_DIR/$platform/assets"
@@ -182,26 +149,11 @@ for platform in "${PLATFORMS[@]}"; do
     cp -r docs "$OUTPUT_DIR/$platform/"
     cp -r examples "$OUTPUT_DIR/$platform/"
 
-    set_clipboard_target "$platform"
-    mkdir -p "$OUTPUT_DIR/$platform/node_modules/@mariozechner"
-    cp -r ../../node_modules/@mariozechner/clipboard "$OUTPUT_DIR/$platform/node_modules/@mariozechner/"
-    cp "../../node_modules/@mariozechner/$clipboard_native_package/$clipboard_native_file" \
-        "$OUTPUT_DIR/$platform/node_modules/@mariozechner/clipboard/"
-
-    # Copy terminal input native helpers next to compiled binaries.
-    if [[ "$platform" == darwin-* ]]; then
-        mkdir -p "$OUTPUT_DIR/$platform/native/darwin/prebuilds/$platform"
-        cp ../tui/native/darwin/prebuilds/$platform/darwin-modifiers.node "$OUTPUT_DIR/$platform/native/darwin/prebuilds/$platform/"
-    fi
-    if [[ "$platform" == windows-* ]]; then
-        if [[ "$platform" == "windows-arm64" ]]; then
-            win32_arch_dir="win32-arm64"
-        else
-            win32_arch_dir="win32-x64"
-        fi
-        mkdir -p "$OUTPUT_DIR/$platform/native/win32/prebuilds/$win32_arch_dir"
-        cp ../tui/native/win32/prebuilds/$win32_arch_dir/win32-console-mode.node "$OUTPUT_DIR/$platform/native/win32/prebuilds/$win32_arch_dir/"
-    fi
+    # Copy the selected architecture's native platform helpers next to the executable.
+    native_platform="${platform/windows-/win32-}"
+    native_path="native/${native_platform%-*}/prebuilds"
+    mkdir -p "$OUTPUT_DIR/$platform/$native_path"
+    cp -R "../tui/$native_path/$native_platform" "$OUTPUT_DIR/$platform/$native_path/"
 done
 
 # Create archives

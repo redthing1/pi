@@ -4,8 +4,10 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { installCodingAgentConsumer, packReleasePackages, smokeTestCodingAgentConsumer } from "./coding-agent-consumer.mjs";
 
 const packages = [
+	{ directory: "packages/chord", name: "@earendil-works/chord" },
 	{ directory: "packages/telemetry", name: "@earendil-works/pi-telemetry" },
 	{ directory: "packages/ai", name: "@earendil-works/pi-ai" },
 	{ directory: "packages/tui", name: "@earendil-works/pi-tui" },
@@ -136,11 +138,6 @@ function prepareOutputDirectory(options, repoRoot) {
 	return outDir;
 }
 
-function fileSpecifier(fromDirectory, file) {
-	const relativePath = relative(fromDirectory, file).replaceAll("\\", "/");
-	return `file:${relativePath.startsWith(".") ? relativePath : `./${relativePath}`}`;
-}
-
 function currentBinaryPlatform() {
 	if (process.platform === "win32") return process.arch === "arm64" ? "windows-arm64" : "windows-x64";
 	if (process.platform === "darwin") return process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
@@ -156,7 +153,6 @@ function buildBunBinaryRelease(targetDirectory, archiveDirectory) {
 	const binaryBuildDirectory = join(archiveDirectory, "binary-build");
 	run("./scripts/build-binaries.sh", [
 		"--skip-install",
-		"--skip-deps",
 		"--skip-build",
 		"--platform",
 		platform,
@@ -183,23 +179,6 @@ function createPiShim(installDirectory) {
 		return;
 	}
 	symlinkSync(join("node_modules", ".bin", "pi"), join(installDirectory, "pi"));
-}
-
-function packPackage(pkg, tarballDirectory) {
-	const packageJson = readPackageJson(pkg.directory);
-	if (packageJson.name !== pkg.name) {
-		throw new Error(`${pkg.directory}/package.json has name ${packageJson.name}, expected ${pkg.name}`);
-	}
-
-	const output = run("bun", ["pm", "pack", "--destination", tarballDirectory, "--ignore-scripts", "--quiet"], {
-		capture: true,
-		cwd: pkg.directory,
-	});
-	const packed = output.trim().split(/\r?\n/).at(-1);
-	if (!packed) {
-		throw new Error(`No tarball produced for ${pkg.name}`);
-	}
-	return isAbsolute(packed) ? packed : join(tarballDirectory, packed);
 }
 
 const options = parseArgs();
@@ -229,11 +208,7 @@ for (const pkg of packages) {
 	run("bun", ["run", "build"], { cwd: pkg.directory });
 }
 
-const tarballs = new Map();
-for (const pkg of packages) {
-	const tarball = packPackage(pkg, tarballDirectory);
-	tarballs.set(pkg.name, tarball);
-}
+const tarballs = packReleasePackages(packages, tarballDirectory);
 
 let binaryPlatform;
 if (!options.skipInstall) {
@@ -243,12 +218,8 @@ if (!options.skipInstall) {
 		if (!commandExists("bun")) {
 			throw new Error("Bun is required for the isolated Bun install. Use --skip-bun-install to skip it.");
 		}
-		mkdirSync(bunInstallDirectory, { recursive: true });
-		const bunDependencies = Object.fromEntries(
-			packages.map((pkg) => [pkg.name, fileSpecifier(bunInstallDirectory, tarballs.get(pkg.name))]),
-		);
-		writeFileSync(join(bunInstallDirectory, "package.json"), `${JSON.stringify({ private: true, dependencies: bunDependencies, overrides: bunDependencies }, undefined, "\t")}\n`);
-		run("bun", ["install", "--production", "--ignore-scripts"], { cwd: bunInstallDirectory });
+		installCodingAgentConsumer(bunInstallDirectory, tarballs);
+		smokeTestCodingAgentConsumer(bunInstallDirectory, "bun");
 		createPiShim(bunInstallDirectory);
 	}
 }

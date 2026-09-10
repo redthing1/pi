@@ -101,16 +101,7 @@ When closing issues via commit:
 
 ## Testing pi Interactive Mode with tmux
 
-Run the TUI in a controlled terminal (from the repo root):
-
-```bash
-tmux new-session -d -s pi-test -x 80 -y 24
-tmux send-keys -t pi-test "./pi-test.sh" Enter
-sleep 3 && tmux capture-pane -t pi-test -p     # capture after startup
-tmux send-keys -t pi-test "your prompt here" Enter
-tmux send-keys -t pi-test Escape               # special keys (also C-o for ctrl+o, etc.)
-tmux kill-session -t pi-test
-```
+For testing pi's interactive mode, load and follow [.pi/skills/interactive-testing.md](.pi/skills/interactive-testing.md).
 
 ## Changelog
 
@@ -126,41 +117,12 @@ Rules:
 
 Attribution:
 
-- Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/pi-mono/issues/123))`
-- External contributions: `Added feature X ([#456](https://github.com/earendil-works/pi-mono/pull/456) by [@username](https://github.com/username))`
+- Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/pi/issues/123))`
+- External contributions: `Added feature X ([#456](https://github.com/earendil-works/pi/pull/456) by [@username](https://github.com/username))`
 
 ## Releasing
 
-**Lockstep versioning**: all packages share one version; every release updates all together. `patch` = fixes + additions, `minor` = breaking changes. No major releases.
-
-1. **Update CHANGELOGs**: ask the user whether they ran the `/cl` prompt on the latest commit on `main`. If not, they must run `/cl` first to audit and update each package's `[Unreleased]` section before releasing.
-
-2. **Local smoke test**: build an unpublished release and smoke test from outside the repo (so it can't resolve workspace files):
-   ```bash
-   bun run release:local -- --out /tmp/pi-local-release --force
-   cd /tmp
-
-   # Bun binary smoke tests
-   /tmp/pi-local-release/bun/pi --help
-   /tmp/pi-local-release/bun/pi --version
-   /tmp/pi-local-release/bun/pi --list-models
-   /tmp/pi-local-release/bun/pi -p "Say exactly: ok"
-   /tmp/pi-local-release/bun/pi
-   ```
-   Verify Bun startup, model/account listing, interactive startup, and at least one real prompt with the intended default provider. The bare command `/tmp/pi-local-release/bun/pi` starts interactive mode; run it in tmux, submit a prompt, and wait for the model reply before considering the interactive smoke test passed. Failures are release blockers unless the user explicitly accepts the risk.
-
-3. **Run the release script**:
-   ```bash
-   bun run release:patch    # fixes + additions
-   bun run release:minor    # breaking changes
-   ```
-   Review any lockfile diffs and both release commits before pushing or publishing.
-
-   The release script bumps all package versions, updates changelogs, regenerates release artifacts, runs `bun run check` and `./test.sh`, commits `Release vX.Y.Z`, tags `vX.Y.Z`, adds fresh `## [Unreleased]` changelog sections, and commits `Add [Unreleased] section for next cycle`. It does not push or publish.
-
-4. **Review and publish explicitly**: verify the release commits and tag, then run `bun run publish:dry`. Registry publishing is a separate, manual action via `bun run publish` and may require npm authentication. Do not publish unless the user explicitly requests it.
-
-5. **Push explicitly**: after review and any requested publishing, push `main` and `vX.Y.Z` explicitly. Do not rerun the release script for the same version.
+For release preparation, publishing, verification, or recovery, load and follow [.pi/skills/release.md](.pi/skills/release.md).
 
 ## User Override
 

@@ -13,20 +13,15 @@ import { hasTrustRequiringProjectResources, ProjectTrustStore } from "./core/tru
 
 export type PackageCommand = "install" | "remove" | "update" | "list";
 
-type UpdateTarget = { type: "all" } | { type: "self" } | { type: "extensions"; source?: string } | { type: "models" };
-
 interface PackageCommandOptions {
 	command: PackageCommand;
 	source?: string;
-	updateTarget?: UpdateTarget;
+	updateModels: boolean;
 	local: boolean;
-	force: boolean;
 	projectTrustOverride?: boolean;
 	help: boolean;
 	invalidOption?: string;
 	invalidArgument?: string;
-	missingOptionValue?: string;
-	conflictingOptions?: string;
 }
 
 function reportSettingsErrors(settingsManager: SettingsManager, context: string): void {
@@ -46,7 +41,7 @@ function getPackageCommandUsage(command: PackageCommand): string {
 		case "remove":
 			return `${APP_NAME} remove <source> [-l] [--approve|--no-approve]`;
 		case "update":
-			return `${APP_NAME} update [source|self|pi] [--self|--extensions|--models|--all] [--extension <source>] [--approve|--no-approve] [--force]`;
+			return `${APP_NAME} update --models`;
 		case "list":
 			return `${APP_NAME} list [--approve|--no-approve]`;
 	}
@@ -109,24 +104,10 @@ Examples:
 			console.log(`${chalk.bold("Usage:")}
   ${getPackageCommandUsage("update")}
 
-Refresh model catalogs or show the fork self-update policy. Remote package updates are disabled; local package paths are used as-is. Pi never downloads or installs update code; replace it only from a reviewed local build.
+Explicitly refresh model catalogs.
 
 Options:
-  --self                  Show the fork self-update policy
-	--extensions            Report the local-only package update policy
-	--models                Refresh model catalogs only
-  --all                   Report package and fork self-update policies
-  --extension <source>    Check one local package path
-  -a, --approve           Trust project-local files for this command
-  -na, --no-approve       Ignore project-local files for this command
-  --force                 Accepted for upstream CLI compatibility; self-update remains disabled
-
-Short forms:
-  ${APP_NAME} update                Report package and fork self-update policies
-  ${APP_NAME} update --all          Report package and fork self-update policies
-  ${APP_NAME} update --models       Refresh model catalogs only
-  ${APP_NAME} update <source>       Check one local package path
-  ${APP_NAME} update pi             Show the fork self-update policy
+  --models  Refresh model catalogs
 `);
 			return;
 
@@ -157,22 +138,14 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 	}
 
 	let local = false;
-	let force = false;
 	let projectTrustOverride: boolean | undefined;
 	let help = false;
 	let invalidOption: string | undefined;
 	let invalidArgument: string | undefined;
-	let missingOptionValue: string | undefined;
-	let conflictingOptions: string | undefined;
 	let source: string | undefined;
-	let selfFlag = false;
-	let extensionsFlag = false;
-	let modelsFlag = false;
-	let allFlag = false;
-	let extensionFlagSource: string | undefined;
+	let updateModels = false;
 
-	for (let index = 0; index < rest.length; index++) {
-		const arg = rest[index];
+	for (const arg of rest) {
 		if (arg === "-h" || arg === "--help") {
 			help = true;
 			continue;
@@ -187,36 +160,9 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			continue;
 		}
 
-		if (arg === "--self") {
-			if (command === "update") {
-				selfFlag = true;
-			} else {
-				invalidOption = invalidOption ?? arg;
-			}
-			continue;
-		}
-
-		if (arg === "--extensions") {
-			if (command === "update") {
-				extensionsFlag = true;
-			} else {
-				invalidOption = invalidOption ?? arg;
-			}
-			continue;
-		}
-
 		if (arg === "--models") {
 			if (command === "update") {
-				modelsFlag = true;
-			} else {
-				invalidOption = invalidOption ?? arg;
-			}
-			continue;
-		}
-
-		if (arg === "--all") {
-			if (command === "update") {
-				allFlag = true;
+				updateModels = true;
 			} else {
 				invalidOption = invalidOption ?? arg;
 			}
@@ -224,40 +170,14 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		}
 
 		if (arg === "--approve" || arg === "-a") {
-			projectTrustOverride = true;
+			if (command === "update") invalidOption = invalidOption ?? arg;
+			else projectTrustOverride = true;
 			continue;
 		}
 
 		if (arg === "--no-approve" || arg === "-na") {
-			projectTrustOverride = false;
-			continue;
-		}
-
-		if (arg === "--force") {
-			if (command === "update") {
-				force = true;
-			} else {
-				invalidOption = invalidOption ?? arg;
-			}
-			continue;
-		}
-
-		if (arg === "--extension") {
-			if (command !== "update") {
-				invalidOption = invalidOption ?? arg;
-				continue;
-			}
-
-			const value = rest[index + 1];
-			if (!value || value.startsWith("-")) {
-				missingOptionValue = missingOptionValue ?? arg;
-			} else if (extensionFlagSource) {
-				conflictingOptions = conflictingOptions ?? "--extension can only be provided once";
-				index++;
-			} else {
-				extensionFlagSource = value;
-				index++;
-			}
+			if (command === "update") invalidOption = invalidOption ?? arg;
+			else projectTrustOverride = false;
 			continue;
 		}
 
@@ -266,87 +186,23 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			continue;
 		}
 
-		if (!source) {
+		if ((command === "install" || command === "remove") && !source) {
 			source = arg;
 		} else {
 			invalidArgument = invalidArgument ?? arg;
 		}
 	}
 
-	let updateTarget: UpdateTarget | undefined;
-	if (command === "update") {
-		if (allFlag && (selfFlag || extensionsFlag || modelsFlag || extensionFlagSource)) {
-			conflictingOptions =
-				conflictingOptions ?? "--all cannot be combined with --self, --extensions, --models, or --extension";
-		}
-		if (allFlag && source) {
-			conflictingOptions = conflictingOptions ?? "--all cannot be combined with a positional source";
-		}
-
-		if (modelsFlag) {
-			if (selfFlag || extensionsFlag || allFlag || extensionFlagSource) {
-				conflictingOptions =
-					conflictingOptions ?? "--models cannot be combined with --self, --extensions, --all, or --extension";
-			}
-			if (source) {
-				conflictingOptions = conflictingOptions ?? "--models cannot be combined with a positional source";
-			}
-			updateTarget = { type: "models" };
-		} else if (extensionFlagSource) {
-			if (selfFlag || extensionsFlag || allFlag) {
-				conflictingOptions =
-					conflictingOptions ?? "--extension cannot be combined with --self, --extensions, or --all";
-			}
-			if (source) {
-				conflictingOptions = conflictingOptions ?? "--extension cannot be combined with a positional source";
-			}
-			updateTarget = { type: "extensions", source: extensionFlagSource };
-		} else if (source) {
-			const sourceIsSelf = source === "self" || source === "pi";
-			if (sourceIsSelf) {
-				updateTarget = extensionsFlag ? { type: "all" } : { type: "self" };
-			} else {
-				if (extensionsFlag || selfFlag || allFlag) {
-					conflictingOptions =
-						conflictingOptions ??
-						"positional update targets cannot be combined with --self, --extensions, or --all";
-				}
-				updateTarget = { type: "extensions", source };
-			}
-		} else if (allFlag) {
-			updateTarget = { type: "all" };
-		} else if (selfFlag && extensionsFlag) {
-			updateTarget = { type: "all" };
-		} else if (selfFlag) {
-			updateTarget = { type: "self" };
-		} else if (extensionsFlag) {
-			updateTarget = { type: "extensions" };
-		} else {
-			updateTarget = { type: "all" };
-		}
-	}
-
 	return {
 		command,
 		source,
-		updateTarget,
+		updateModels,
 		local,
-		force,
 		projectTrustOverride,
 		help,
 		invalidOption,
 		invalidArgument,
-		missingOptionValue,
-		conflictingOptions,
 	};
-}
-
-function updateTargetIncludesSelf(target: UpdateTarget): boolean {
-	return target.type === "all" || target.type === "self";
-}
-
-function updateTargetIncludesExtensions(target: UpdateTarget): boolean {
-	return target.type === "all" || target.type === "extensions";
 }
 
 async function refreshModelCatalogs(agentDir: string): Promise<void> {
@@ -377,15 +233,6 @@ async function refreshModelCatalogs(agentDir: string): Promise<void> {
 	console.log(chalk.green("Model catalogs refreshed"));
 }
 
-function printSelfUpdateDisabled(): void {
-	console.error(chalk.red(`${APP_NAME} self-update is disabled in this fork.`));
-	console.error(chalk.dim(`${APP_NAME} never downloads or installs update code. Use a reviewed local build.`));
-}
-
-function printPackageUpdatesDisabled(): void {
-	console.log(chalk.dim("Remote package updates are disabled; local package paths are used as-is."));
-}
-
 export interface PackageCommandRuntimeOptions {
 	extensionFactories?: InlineExtension[];
 }
@@ -409,18 +256,11 @@ async function createCommandSettingsManager(options: {
 	cwd: string;
 	agentDir: string;
 	projectTrustOverride?: boolean;
-	useSavedProjectTrustOnly?: boolean;
 	extensionFactories?: InlineExtension[];
 }): Promise<CommandSettingsResult> {
 	const settingsManager = SettingsManager.create(options.cwd, options.agentDir, { projectTrusted: false });
 	const projectTrustWarnings: string[] = [];
 	const trustStore = new ProjectTrustStore(options.agentDir);
-	if (options.useSavedProjectTrustOnly) {
-		const savedProjectTrusted = trustStore.get(options.cwd) === true;
-		settingsManager.setProjectTrusted(options.projectTrustOverride ?? savedProjectTrusted);
-		return { settingsManager, projectTrustWarnings };
-	}
-
 	const appMode = getCommandAppMode();
 	const extensionsResult =
 		options.projectTrustOverride === undefined && hasTrustRequiringProjectResources(options.cwd)
@@ -547,22 +387,8 @@ export async function handlePackageCommand(
 		return true;
 	}
 
-	if (options.missingOptionValue) {
-		console.error(chalk.red(`Missing value for ${options.missingOptionValue}.`));
-		console.error(chalk.dim(`Usage: ${getPackageCommandUsage(options.command)}`));
-		process.exitCode = 1;
-		return true;
-	}
-
 	if (options.invalidArgument) {
 		console.error(chalk.red(`Unexpected argument ${options.invalidArgument}.`));
-		console.error(chalk.dim(`Usage: ${getPackageCommandUsage(options.command)}`));
-		process.exitCode = 1;
-		return true;
-	}
-
-	if (options.conflictingOptions) {
-		console.error(chalk.red(options.conflictingOptions));
 		console.error(chalk.dim(`Usage: ${getPackageCommandUsage(options.command)}`));
 		process.exitCode = 1;
 		return true;
@@ -576,7 +402,13 @@ export async function handlePackageCommand(
 		return true;
 	}
 
-	if (options.command === "update" && options.updateTarget?.type === "models") {
+	if (options.command === "update") {
+		if (!options.updateModels) {
+			console.error(chalk.red("Missing --models."));
+			console.error(chalk.dim(`Usage: ${getPackageCommandUsage("update")}`));
+			process.exitCode = 1;
+			return true;
+		}
 		try {
 			await refreshModelCatalogs(getAgentDir());
 		} catch (error: unknown) {
@@ -594,7 +426,6 @@ export async function handlePackageCommand(
 		cwd,
 		agentDir,
 		projectTrustOverride: options.projectTrustOverride,
-		useSavedProjectTrustOnly: options.command === "update",
 		extensionFactories: runtimeOptions.extensionFactories,
 	});
 	reportProjectTrustWarnings(projectTrustWarnings);
@@ -664,20 +495,6 @@ export async function handlePackageCommand(
 					}
 				}
 
-				return true;
-			}
-
-			case "update": {
-				const target = options.updateTarget ?? { type: "all" };
-				if (updateTargetIncludesExtensions(target)) {
-					const updateSource = target.type === "extensions" ? target.source : undefined;
-					await packageManager.update(updateSource);
-					printPackageUpdatesDisabled();
-				}
-				if (updateTargetIncludesSelf(target)) {
-					printSelfUpdateDisabled();
-					process.exitCode = 1;
-				}
 				return true;
 			}
 		}

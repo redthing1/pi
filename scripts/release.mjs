@@ -127,7 +127,7 @@ function bumpOrSetVersion(target) {
 	}
 
 	console.log(`Setting explicit version (${target})...`);
-	run(`bun scripts/bump-version.mjs ${target} && bun scripts/sync-versions.js && bun install --lockfile-only`);
+	run(`bun scripts/bump-version.mjs ${target} && bun scripts/sync-versions.js && bun install --lockfile-only --ignore-scripts`);
 	return getVersion();
 }
 
@@ -202,8 +202,8 @@ console.log();
 
 // 5. Regenerate release artifacts
 console.log("Regenerating release artifacts...");
-run("bun --cwd packages/ai run generate-models");
-run("bun --cwd packages/ai run generate-image-models");
+run("bun run --cwd packages/ai generate-models");
+run("bun run --cwd packages/ai generate-image-models");
 console.log();
 
 // 6. Run checks and tests
@@ -213,6 +213,10 @@ console.log();
 
 console.log("Running tests...");
 run("./test.sh");
+console.log();
+
+console.log("Checking the packed coding-agent consumer install...");
+run("bun run check:package-install");
 console.log();
 
 // 7. Commit and tag

@@ -365,45 +365,6 @@
       position: relative;
     }
 
-    /* Copy link button - appears on hover */
-    .copy-link-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 28px;
-      height: 28px;
-      padding: 6px;
-      background: var(--container-bg);
-      border: 1px solid var(--dim);
-      border-radius: 4px;
-      color: var(--muted);
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.15s, background 0.15s, color 0.15s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
-
-    .user-message:hover .copy-link-btn,
-    .assistant-message:hover .copy-link-btn,
-    .skill-user-entry:hover .copy-link-btn {
-      opacity: 1;
-    }
-
-    .copy-link-btn:hover {
-      background: var(--accent);
-      color: var(--body-bg);
-      border-color: var(--accent);
-    }
-
-    .copy-link-btn.copied {
-      background: var(--success, #22c55e);
-      color: white;
-      border-color: var(--success, #22c55e);
-    }
-
     /* Highlight effect for deep-linked messages */
     .user-message.highlight,
     .assistant-message.highlight {

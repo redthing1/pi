@@ -145,7 +145,7 @@ export class ModelSelectorComponent extends Container implements Focusable {
 				new Text(
 					theme.fg(
 						"dim",
-						`  Enter to select \u00b7 ${keyDisplayText("app.model.setDefault")} to set as default \u00b7 Esc to cancel`,
+						`  ${keyDisplayText("tui.select.confirm")} to select · ${keyDisplayText("app.models.save")} to set as default · ${keyDisplayText("tui.select.cancel")} to cancel`,
 					),
 					0,
 					0,
@@ -413,8 +413,8 @@ export class ModelSelectorComponent extends Container implements Focusable {
 			this.dispose();
 			this.onCancelCallback();
 		}
-		// Ctrl+S — select and save as default
-		else if (kb.matches(keyData, "app.model.setDefault") && this.onSelectAsDefaultCallback) {
+		// Select and save as default
+		else if (kb.matches(keyData, "app.models.save") && this.onSelectAsDefaultCallback) {
 			const selectedModel = this.filteredModels[this.selectedIndex];
 			if (selectedModel) {
 				this.dispose();

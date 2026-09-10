@@ -1,20 +1,13 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { Box, Container, Spacer, Text } from "@earendil-works/pi-tui";
 import { constants } from "fs";
 import { access as fsAccess, readFile as fsReadFile, writeFile as fsWriteFile } from "fs/promises";
 import { type Static, Type } from "typebox";
-import { countDiffLines, DiffView, renderDiff } from "../../modes/interactive/components/diff.ts";
-import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { splitBom } from "../../utils/text.ts";
-import { getExperimentalToolSampling } from "../experimental.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import {
 	applyEditsToNormalizedContent,
-	computeEditsDiff,
 	detectLineEnding,
 	type Edit,
-	type EditDiffError,
-	type EditDiffResult,
 	generateDiffString,
 	generateUnifiedPatch,
 	normalizeToLF,
@@ -22,12 +15,8 @@ import {
 } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
 import { resolveToCwd } from "./path-utils.ts";
-import { renderToolPath, str } from "./render-utils.ts";
+import { type EditRenderState, editRenderers } from "./renderers/edit.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
-
-type EditRenderState = {
-	callComponent?: EditCallRenderComponent;
-};
 
 const replaceEditSchema = Type.Object(
 	{
@@ -153,177 +142,6 @@ function validateEditInput(input: EditToolInput): { path: string; edits: Edit[] 
 	return { path: input.path, edits: input.edits };
 }
 
-type RenderableEditArgs = {
-	path?: string;
-	file_path?: string;
-	edits?: Edit[];
-	oldText?: string;
-	newText?: string;
-};
-
-type EditToolResultLike = {
-	content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-	details?: EditToolDetails;
-};
-
-type EditRenderStatus = "pending" | "success" | "error";
-
-class EditCallRenderComponent extends Box {
-	preview?: EditDiffResult;
-	previewError?: string;
-	previewArgsKey?: string;
-	renderedPreviewArgsKey?: string;
-	previewPending = false;
-	argsComplete = false;
-	status: EditRenderStatus = "pending";
-	diffView?: DiffView;
-
-	constructor() {
-		super(0, 0);
-	}
-}
-
-function getEditCallRenderComponent(state: EditRenderState, lastComponent: unknown): EditCallRenderComponent {
-	if (lastComponent instanceof EditCallRenderComponent) {
-		state.callComponent = lastComponent;
-		return lastComponent;
-	}
-	if (state.callComponent) {
-		return state.callComponent;
-	}
-	const component = new EditCallRenderComponent();
-	state.callComponent = component;
-	return component;
-}
-
-function getRenderablePreviewInput(args: RenderableEditArgs | undefined): { path: string; edits: Edit[] } | null {
-	if (!args) {
-		return null;
-	}
-
-	const path = typeof args.path === "string" ? args.path : typeof args.file_path === "string" ? args.file_path : null;
-	if (!path) {
-		return null;
-	}
-
-	if (
-		Array.isArray(args.edits) &&
-		args.edits.length > 0 &&
-		args.edits.every((edit) => typeof edit?.oldText === "string" && typeof edit?.newText === "string")
-	) {
-		return { path, edits: args.edits };
-	}
-
-	if (typeof args.oldText === "string" && typeof args.newText === "string") {
-		return { path, edits: [{ oldText: args.oldText, newText: args.newText }] };
-	}
-
-	return null;
-}
-
-function formatEditCall(
-	args: RenderableEditArgs | undefined,
-	preview: EditDiffResult | undefined,
-	status: EditRenderStatus,
-	theme: Theme,
-	cwd: string,
-): string {
-	const pathDisplay = renderToolPath(str(args?.file_path ?? args?.path), theme, cwd);
-	const marker = status === "error" ? theme.fg("error", "×") : theme.fg("muted", "•");
-	const title = status === "error" ? "Failed to edit" : status === "success" ? "Edited" : "Editing";
-	const styledTitle = theme.fg(status === "error" ? "error" : "toolTitle", theme.bold(title));
-	let counts = "";
-	if (preview) {
-		const { added, removed } = countDiffLines(preview.diff);
-		counts = ` ${theme.fg("muted", "(")}${theme.fg("toolDiffAdded", `+${added}`)} ${theme.fg("toolDiffRemoved", `-${removed}`)}${theme.fg("muted", ")")}`;
-	}
-	return `${marker} ${styledTitle} ${pathDisplay}${counts}`;
-}
-
-function formatEditResult(
-	args: RenderableEditArgs | undefined,
-	preview: EditDiffResult | undefined,
-	previewError: string | undefined,
-	result: EditToolResultLike,
-	theme: Theme,
-	isError: boolean,
-): string | undefined {
-	const rawPath = str(args?.file_path ?? args?.path);
-	const previewDiff = preview?.diff;
-	if (isError) {
-		const errorText = result.content
-			.filter((c) => c.type === "text")
-			.map((c) => c.text || "")
-			.join("\n");
-		if (!errorText || errorText === previewError) {
-			return undefined;
-		}
-		return theme.fg("error", errorText);
-	}
-
-	const resultDiff = result.details?.diff;
-	if (resultDiff && resultDiff !== previewDiff) {
-		return renderDiff(resultDiff, { filePath: rawPath ?? undefined });
-	}
-
-	return undefined;
-}
-
-function buildEditCallComponent(
-	component: EditCallRenderComponent,
-	args: RenderableEditArgs | undefined,
-	theme: Theme,
-	cwd: string,
-): EditCallRenderComponent {
-	component.clear();
-	component.addChild(new Text(formatEditCall(args, component.preview, component.status, theme, cwd), 0, 0));
-
-	if (component.preview) {
-		const rawPath = str(args?.file_path ?? args?.path);
-		if (component.diffView) {
-			component.diffView.setDiff(component.preview.diff, { filePath: rawPath ?? undefined });
-		} else {
-			component.diffView = new DiffView(component.preview.diff, { filePath: rawPath ?? undefined });
-		}
-		component.addChild(component.diffView);
-	}
-
-	if (component.previewError && (component.argsComplete || component.status === "error")) {
-		component.addChild(new Text(theme.fg("error", component.previewError), 1, 0));
-	}
-	return component;
-}
-
-function setEditPreview(
-	component: EditCallRenderComponent,
-	preview: EditDiffResult | EditDiffError,
-	argsKey: string | undefined,
-): boolean {
-	let changed = false;
-	if ("error" in preview) {
-		if (component.previewError !== preview.error) changed = true;
-		component.previewError = preview.error;
-		if (component.argsComplete && component.preview) {
-			component.preview = undefined;
-			changed = true;
-		}
-	} else {
-		if (
-			!component.preview ||
-			component.preview.diff !== preview.diff ||
-			component.preview.firstChangedLine !== preview.firstChangedLine ||
-			component.previewError !== undefined
-		) {
-			changed = true;
-		}
-		component.preview = preview;
-		component.previewError = undefined;
-	}
-	component.renderedPreviewArgsKey = argsKey;
-	component.previewPending = false;
-	return changed;
-}
-
 export function createEditToolDefinition(
 	cwd: string,
 	options?: EditToolOptions,
@@ -338,12 +156,12 @@ export function createEditToolDefinition(
 		promptSnippet: editToolSystemPromptContribution.snippet,
 		promptGuidelines: [...editToolSystemPromptContribution.guidelines],
 		parameters: editSchema,
-		constrainedSampling: getExperimentalToolSampling(),
+		constrainedSampling: { type: "json_schema", strict: "prefer" },
 		renderShell: "self",
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?: ExtensionContext) {
 			const { path, edits } = validateEditInput(input);
-			const absolutePath = resolveToCwd(path, ctx?.cwd || cwd);
+			const absolutePath = resolveToCwd(path, ctx?.cwd ?? cwd);
 
 			return mutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the
@@ -396,93 +214,7 @@ export function createEditToolDefinition(
 				};
 			});
 		},
-		renderCall(args, theme, context) {
-			const component = getEditCallRenderComponent(context.state, context.lastComponent);
-			const previewInput = getRenderablePreviewInput(args as RenderableEditArgs | undefined);
-			const argsKey = previewInput
-				? JSON.stringify({ path: previewInput.path, edits: previewInput.edits })
-				: undefined;
-
-			if (component.previewArgsKey !== argsKey) {
-				component.previewArgsKey = argsKey;
-				component.previewError = undefined;
-				component.status = "pending";
-			}
-			component.argsComplete = context.argsComplete;
-			if (component.argsComplete && component.previewError) {
-				component.preview = undefined;
-			}
-
-			if (
-				previewInput &&
-				component.status === "pending" &&
-				component.renderedPreviewArgsKey !== argsKey &&
-				!component.previewPending
-			) {
-				component.previewPending = true;
-				const requestKey = argsKey;
-				void computeEditsDiff(previewInput.path, previewInput.edits, context.cwd).then((preview) => {
-					component.previewPending = false;
-					if (component.previewArgsKey === requestKey && component.status === "pending") {
-						setEditPreview(component, preview, requestKey);
-					}
-					context.invalidate();
-				});
-			}
-
-			return buildEditCallComponent(component, args, theme, context.cwd);
-		},
-		renderResult(result, _options, theme, context) {
-			const callComponent = context.state.callComponent;
-			const previewInput = getRenderablePreviewInput(context.args as RenderableEditArgs | undefined);
-			const argsKey = previewInput
-				? JSON.stringify({ path: previewInput.path, edits: previewInput.edits })
-				: undefined;
-			const typedResult = result as EditToolResultLike;
-			const resultDiff = !context.isError ? typedResult.details?.diff : undefined;
-			let changed = false;
-			if (callComponent) {
-				callComponent.argsComplete = true;
-				if (typeof resultDiff === "string") {
-					changed =
-						setEditPreview(
-							callComponent,
-							{ diff: resultDiff, firstChangedLine: typedResult.details?.firstChangedLine },
-							argsKey,
-						) || changed;
-				}
-				const status = context.isError ? "error" : "success";
-				if (callComponent.status !== status) {
-					callComponent.status = status;
-					changed = true;
-				}
-				if (changed) {
-					buildEditCallComponent(
-						callComponent,
-						context.args as RenderableEditArgs | undefined,
-						theme,
-						context.cwd,
-					);
-				}
-			}
-
-			const output = formatEditResult(
-				context.args,
-				callComponent?.preview,
-				callComponent?.previewError,
-				typedResult,
-				theme,
-				context.isError,
-			);
-			const component = (context.lastComponent as Container | undefined) ?? new Container();
-			component.clear();
-			if (!output) {
-				return component;
-			}
-			component.addChild(new Spacer(1));
-			component.addChild(new Text(output, 1, 0));
-			return component;
-		},
+		...editRenderers,
 	};
 }
 

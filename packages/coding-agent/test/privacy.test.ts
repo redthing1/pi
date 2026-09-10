@@ -1,10 +1,11 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { ZDR_EXPORT_PATH_REQUIRED_MESSAGE, ZDR_MODEL_REQUIRED_MESSAGE } from "../src/core/privacy.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
+import type { BashOperations } from "../src/core/tools/bash.ts";
 
 describe("zero-data-retention mode", () => {
 	let tempDir: string;
@@ -132,6 +133,47 @@ describe("zero-data-retention mode", () => {
 		} finally {
 			session.dispose();
 		}
+	});
+
+	it("keeps truncated shell output in private session storage until disposal", async () => {
+		const modelRuntime = await ModelRuntime.create({ modelsPath, allowModelNetwork: false });
+		const approved = modelRuntime.getModel("zdr-provider", "approved");
+		expect(approved).toBeDefined();
+		const { session } = await createAgentSession({
+			cwd,
+			agentDir,
+			modelRuntime,
+			model: approved,
+			privacy: { clientZdr: true, remoteZdr: true },
+		});
+		const operations: BashOperations = {
+			exec: async (_command, _cwd, options) => {
+				options.onData(Buffer.alloc(60 * 1024, "x"));
+				return { exitCode: 0 };
+			},
+		};
+		let outputDirectory: string | undefined;
+
+		try {
+			const directResult = await session.executeBash("large-output", undefined, { operations });
+			expect(directResult.truncated).toBe(true);
+			expect(directResult.fullOutputPath).toBeDefined();
+			outputDirectory = dirname(directResult.fullOutputPath!);
+			expect(outputDirectory).not.toBe(tmpdir());
+			expect(readFileSync(directResult.fullOutputPath!)).toEqual(Buffer.alloc(60 * 1024, "x"));
+			if (process.platform !== "win32") {
+				expect(statSync(outputDirectory).mode & 0o777).toBe(0o700);
+				expect(statSync(directResult.fullOutputPath!).mode & 0o777).toBe(0o600);
+			}
+
+			const bash = session.getToolDefinition("bash");
+			expect(bash).toBeDefined();
+			expect(bash!.description).toContain("full output is saved to a temp file");
+		} finally {
+			session.dispose();
+		}
+		expect(outputDirectory).toBeDefined();
+		expect(existsSync(outputDirectory!)).toBe(false);
 	});
 
 	it("enforces server ZDR while preserving the persistent session", async () => {

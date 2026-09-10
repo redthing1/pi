@@ -5,7 +5,7 @@ const aiPackage = JSON.parse(readFileSync("packages/ai/package.json", "utf8"));
 const cliSource = readFileSync("packages/coding-agent/src/cli.ts", "utf8");
 
 const expectedBuildPi =
-	"cd packages/tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build:offline && cd ../agent && bun run build && cd ../protocol && bun run build && cd ../client && bun run build && cd ../coding-agent && bun run build";
+	"cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build:offline && cd ../agent && bun run build && cd ../protocol && bun run build && cd ../client && bun run build && cd ../coding-agent && bun run build";
 const expectedInstall =
 	"bun install --frozen-lockfile --ignore-scripts && (bun run check:model-data || bun run hydrate:model-data) && bun run build:pi && bun run link:local-pi";
 

@@ -19,64 +19,9 @@ const __dirname = dirname(__filename);
 export const isBunBinary =
 	import.meta.url.includes("$bunfs") || import.meta.url.includes("~BUN") || import.meta.url.includes("%7EBUN");
 
-/** Detect if Bun is the runtime (compiled binary or bun run) */
-export const isBunRuntime = !!process.versions.bun;
-
-// =============================================================================
-// Install Method Detection
-// =============================================================================
-
-export type InstallMethod = "bun-binary" | "npm" | "pnpm" | "yarn" | "bun" | "unknown";
-
-export interface SelfUpdateCommand {
-	command: string;
-	args: string[];
-	display: string;
-	steps?: SelfUpdateCommand[];
-}
-
-export function detectInstallMethod(): InstallMethod {
-	if (isBunBinary) {
-		return "bun-binary";
-	}
-
-	const resolvedPath = `${__dirname}\0${process.execPath || ""}`.toLowerCase().replace(/\\/g, "/");
-
-	if (resolvedPath.includes("/pnpm/") || resolvedPath.includes("/.pnpm/")) {
-		return "pnpm";
-	}
-	if (resolvedPath.includes("/yarn/") || resolvedPath.includes("/.yarn/")) {
-		return "yarn";
-	}
-	if (isBunRuntime || resolvedPath.includes("/install/global/node_modules/")) {
-		return "bun";
-	}
-	if (resolvedPath.includes("/npm/") || resolvedPath.includes("/node_modules/")) {
-		return "npm";
-	}
-
-	return "unknown";
-}
-
-export function getSelfUpdateCommand(
-	_packageName: string,
-	_npmCommand?: string[],
-	_updatePackageName = _packageName,
-): SelfUpdateCommand | undefined {
-	return undefined;
-}
-
-export function getSelfUpdateUnavailableInstruction(
-	_packageName: string,
-	_npmCommand?: string[],
-	_updatePackageName = _packageName,
-): string {
-	return "Self-update is disabled in this fork. Replace pi only from a reviewed local build.";
-}
-
-export function getUpdateInstruction(_packageName: string): string {
-	return "Automatic updates are disabled. Use a reviewed local build.";
-}
+/** Detect the esbuild-bundled Node.js distribution. */
+declare const PI_BUNDLED_NODE: boolean;
+export const isBundledNode = typeof PI_BUNDLED_NODE !== "undefined" && PI_BUNDLED_NODE;
 
 // =============================================================================
 // Package Asset Paths (shipped with executable)
@@ -229,14 +174,6 @@ export const ENV_SESSION_DIR = `${APP_NAME.toUpperCase()}_CODING_AGENT_SESSION_D
 
 export function expandTildePath(path: string): string {
 	return normalizePath(path);
-}
-
-const DEFAULT_SHARE_VIEWER_URL = "https://pi.dev/session/";
-
-/** Get the share viewer URL for a gist ID. */
-export function getShareViewerUrl(gistId: string): string {
-	const baseUrl = process.env.PI_SHARE_VIEWER_URL || DEFAULT_SHARE_VIEWER_URL;
-	return `${baseUrl}#${gistId}`;
 }
 
 // =============================================================================

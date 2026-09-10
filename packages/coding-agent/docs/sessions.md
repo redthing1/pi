@@ -33,7 +33,6 @@ For the JSONL file format and SessionManager API, see [Session Format](session-f
 | `/compact [prompt]` | Summarize older context; see [Compaction](compaction.md) |
 | `/export [file]` | Export session to HTML or JSONL |
 | `/import <file.jsonl>` | Import and resume a JSONL session |
-| `/share` | Upload as private GitHub gist with shareable HTML link |
 
 In client ZDR mode, automatic persistence and managed session browsing remain disabled. `/export <path>` remains available with any explicit destination, and `/import <path.jsonl>` loads detached in memory without copying or modifying the source file.
 

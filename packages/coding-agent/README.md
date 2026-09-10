@@ -128,8 +128,8 @@ The interface from top to bottom:
 
 - **Startup header** - Shows shortcuts (`/hotkeys` for all), loaded AGENTS.md files, prompt templates, skills, and extensions
 - **Messages** - Your messages, assistant responses, tool calls and results, notifications, errors, and extension UI
-- **Editor** - Where you type; border color indicates thinking level
-- **Footer** - Working directory, session name, total token/cache usage (`↑` input, `↓` output, `R` cache read, `W` cache write, `CH` latest cache hit rate), cost, context usage, current model
+- **Editor** - Where you type; border color indicates thinking level and the border shows the streaming working indicator
+- **Footer** - Working directory, session name, total token/cache usage (`↑` input, `↓` output, `R` cache read, `W` cache write, `CH` latest cache hit rate), cost, context usage, current model. Totals include assistant responses, usage reported by tools, and summary generation.
 
 The editor can be temporarily replaced by other UI, like built-in `/settings` or custom UI from extensions (e.g., a Q&A tool that lets the user answer model questions in a structured format). [Extensions](#extensions) can also replace the editor, add widgets above/below it, a status line, custom footer, or overlays.
 
@@ -171,7 +171,6 @@ Type `/` in the editor to trigger commands. [Extensions](#extensions) can regist
 | `/copy` | Copy last assistant message to clipboard |
 | `/export [file]` | Export session to HTML or JSONL file |
 | `/import <file>` | Import and resume a session from a JSONL file |
-| `/share` | Upload as private GitHub gist with shareable HTML link |
 | `/reload` | Reload keybindings, extensions, skills, prompts, themes, and context files |
 | `/hotkeys` | Show all keyboard shortcuts |
 | `/changelog` | Display version history |
@@ -232,7 +231,7 @@ Use `/session` in interactive mode to see the current session ID before reusing 
 
 ### Branching
 
-**`/tree`** - Navigate the session tree in-place. Select any previous point, continue from there, and switch between branches. All history preserved in a single file.
+**`/tree`** - Navigate the session tree in-place. Select any previous point, continue from there, and switch between branches. All history preserved in a single file. Selecting a point while the model is responding cancels that response. Navigation cannot proceed while compaction or another tree navigation is still running; wait for it to finish and retry.
 
 <p align="center"><img src="docs/images/tree-view.png" alt="Tree View" width="600"></p>
 
@@ -280,13 +279,13 @@ Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trus
 
 If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.pi/agent/settings.json`, or change it with `/settings`.
 
-`pi config` and package commands use the same project trust flow, except `pi update` never prompts. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
+`pi config`, `pi install`, `pi remove`, and `pi list` use the same project trust flow. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them. `pi update --models` only refreshes provider catalogs and does not load project resources.
 
 Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.pi/agent/trust.json` only; the current session is not reloaded, so restart pi for changes to take effect.
 
 ### Telemetry and update checks
 
-This fork does not report installs or usage, inject automatic attribution or tracking headers, poll for release notifications, or fetch model catalogs from `pi.dev`. `PI_SKIP_VERSION_CHECK=1` is retained for upstream compatibility.
+This fork does not report installs or usage, inject automatic attribution or tracking headers, poll for release notifications, or fetch model catalogs from `pi.dev`.
 
 ---
 
@@ -389,11 +388,7 @@ pi install /absolute/path/to/package
 pi remove ./local-package
 pi uninstall ./local-package   # alias for remove
 pi list
-pi update                               # report package and fork self-update policies
-pi update --all                         # report package and fork self-update policies
-pi update --extensions                  # report the local-only package update policy
-pi update --self                        # show fork self-update policy
-pi update --self --force                # show fork self-update policy
+pi update --models                      # explicitly refresh model catalogs
 pi config                               # enable/disable extensions, skills, prompts, themes
 ```
 
@@ -488,17 +483,12 @@ pi [options] [--] [@files...] [messages...]
 pi install <source> [-l]     # Install package, -l for project-local
 pi remove <source> [-l]      # Remove package
 pi uninstall <source> [-l]   # Alias for remove
-pi update [source|self|pi]   # Report package and fork self-update policies
-pi update --all              # Report package and fork self-update policies
-pi update --extensions       # Report the local-only package update policy
-pi update --self             # Show fork self-update policy
-pi update --self --force     # Show fork self-update policy
-pi update --extension <src>  # Check one local package path
+pi update --models           # Explicitly refresh model catalogs
 pi list                      # List installed packages
 pi config                    # Enable/disable package resources
 ```
 
-`pi config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. Remote package updates and self-update are disabled; `pi update` never prompts for project trust.
+`pi config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. Remote package updates and self-update do not exist in this fork.
 
 ### Modes
 
@@ -641,7 +631,6 @@ pi --thinking high "Solve this complex problem"
 | `PI_CODING_AGENT_SESSION_DIR` | Override session storage directory (overridden by `--session-dir`) |
 | `PI_PACKAGE_DIR` | Override package directory (useful for Nix/Guix where store paths tokenize poorly) |
 | `PI_OFFLINE` | Disable startup network operations, including provider model refresh |
-| `PI_SKIP_VERSION_CHECK` | Compatibility flag; version polling is disabled in this fork |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache (Anthropic: 1h, OpenAI: 24h) |
 | `VISUAL`, `EDITOR` | Fallback external editor for Ctrl+G when `externalEditor` is unset; defaults to Notepad on Windows and `nano` elsewhere |
 

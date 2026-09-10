@@ -24,15 +24,12 @@ pi install /absolute/path/to/package
 pi install ./relative/path/to/package
 pi remove ./relative/path/to/package
 pi list                     # show configured package paths
-pi update                   # report package and fork self-update policies
-pi update --extensions      # report the local-only package update policy
 pi update --models          # refresh model catalogs
-pi update --self            # show fork self-update policy
 ```
 
 By default, `install` and `remove` write to global settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. Project settings can be shared with your team. Missing configured packages are never installed automatically.
 
-These commands manage pi packages, not the pi CLI installation. To uninstall pi itself, see [Quickstart](quickstart.md#uninstall).
+The package commands manage local resources, not the pi CLI installation. Remote package updates and self-update do not exist. `pi update --models` is a separate, explicit provider-catalog refresh operation. To uninstall pi itself, see [Quickstart](quickstart.md#uninstall).
 
 To try a package without adding it to settings, use `--extension` or `-e` with an already-present local path:
 

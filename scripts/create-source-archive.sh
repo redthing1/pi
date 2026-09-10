@@ -2,7 +2,7 @@
 # Create the deterministic source archive uploaded with GitHub releases.
 #
 # Usage:
-#   npm run hydrate:model-data
+#   bun run hydrate:model-data
 #   ./scripts/create-source-archive.sh --version <version> --ref <git-ref> --out <archive.tar.gz>
 
 set -euo pipefail
@@ -81,7 +81,7 @@ output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
 
 model_data_dir="packages/ai/src/providers/data"
 if [[ ! -f "${model_data_dir}/.manifest.json" ]]; then
-    echo "Generated model data is missing. Run npm run hydrate:model-data first." >&2
+    echo "Generated model data is missing. Run bun run hydrate:model-data first." >&2
     exit 1
 fi
 
@@ -120,6 +120,18 @@ required_paths=(
     "packages/ai/src/models.generated.ts"
     "packages/ai/src/image-models.generated.ts"
     "packages/ai/src/providers/data/.manifest.json"
+    "packages/tui/native/napi.h"
+    "packages/tui/native/clipboard.h"
+    "packages/tui/native/darwin/src/darwin-platform.m"
+    "packages/tui/native/darwin/prebuilds/darwin-arm64/darwin-platform.node"
+    "packages/tui/native/darwin/prebuilds/darwin-x64/darwin-platform.node"
+    "packages/tui/native/linux/build.sh"
+    "packages/tui/native/linux/src/linux-platform-x11.c"
+    "packages/tui/native/linux/prebuilds/linux-arm64/linux-platform-x11.node"
+    "packages/tui/native/linux/prebuilds/linux-x64/linux-platform-x11.node"
+    "packages/tui/native/win32/src/win32-platform.c"
+    "packages/tui/native/win32/prebuilds/win32-arm64/win32-platform.node"
+    "packages/tui/native/win32/prebuilds/win32-x64/win32-platform.node"
     "packages/coding-agent/package.json"
     "packages/coding-agent/src/utils/image-resize-worker.ts"
     "packages/coding-agent/src/core/export-html/template.css"

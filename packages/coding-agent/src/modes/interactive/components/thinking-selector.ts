@@ -94,7 +94,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 			new Text(
 				theme.fg(
 					"dim",
-					`  Enter to select · ${keyDisplayText("app.thinking.setDefault")} to set as default · Esc to cancel`,
+					`  ${keyDisplayText("tui.select.confirm")} to select · ${keyDisplayText("app.thinking.save")} to set as default · ${keyDisplayText("tui.select.cancel")} to cancel`,
 				),
 				0,
 				0,
@@ -128,7 +128,7 @@ export class ThinkingSelectorComponent extends Container implements Focusable {
 
 	handleInput(keyData: string): void {
 		const kb = getKeybindings();
-		if (kb.matches(keyData, "app.thinking.setDefault") && this.onSelectAsDefault) {
+		if (kb.matches(keyData, "app.thinking.save") && this.onSelectAsDefault) {
 			const item = this.selectList.getSelectedItem();
 			if (item) this.onSelectAsDefault(item.value as ThinkingLevel);
 			return;

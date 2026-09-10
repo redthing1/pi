@@ -35,15 +35,19 @@ Fresh-clone dependency hydration may download the exact artifacts named by `bun.
 
 `pi --zdr` is fail-closed privacy mode:
 
-- Keep the session in memory; do not persist, resume, import, export, share, or debug it.
+- Keep the active session in memory and do not persist it automatically. Managed session browsing, resume, continue, switch, fork, and debug persistence remain unavailable.
+- Private session-scoped temporary files may preserve live tool semantics, but Pi must remove them during normal session teardown. Explicit exports remain durable; temporary artifacts do not.
+- Allow explicit export only with a caller-supplied destination, without restricting its location. Explicit JSONL import opens detached in memory and never modifies the source; importing outside client ZDR follows the normal persistent-session behavior.
 - Send requests only to models explicitly approved with `zdr: true`, including an explicit OpenRouter ZDR route. Never fall back to an unapproved model.
 
 ZDR approval is an explicit operator assertion, not provider-policy discovery. Verify the provider agreement and route before marking a provider or model as ZDR. `--zdr-client` and `--no-session` provide only local ephemeral sessions and make no remote-retention claim. See [the model configuration guide](packages/coding-agent/docs/models.md#zero-data-retention) for configuration.
+
+ZDR does not disable provider caching, routing affinity, or required protocol headers when the approved route permits them. Use a fresh runtime-only routing ID where needed; never expose the durable local session ID.
 
 ## No telemetry or vendor phone-home
 
 - Pi runtime must not send install, update, usage, analytics, crash, or diagnostic telemetry.
 - Pi runtime must not automatically contact project-controlled services for version checks, model catalogs, or similar background requests.
-- Pi must not inject project attribution, tracking identifiers, or local session identifiers into provider requests.
-- User-requested provider, OAuth, sharing, and operator-configured endpoint traffic remains allowed. Generic tracing interfaces must stay passive, explicitly host-provided, and no-op by default.
+- Pi must not inject project attribution, tracking identifiers, or durable local session identifiers into provider requests. Provider-required routing and cache-affinity identifiers may use a fresh runtime-only ID.
+- User-requested provider, OAuth, and operator-configured endpoint traffic remains allowed. Pi does not provide session-sharing uploads. Generic tracing interfaces must stay passive, explicitly host-provided, and no-op by default.
 - Revalidate these guarantees during upstream integration and preserve them with focused contract tests.

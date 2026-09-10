@@ -16,11 +16,19 @@ const banner = {
 	js: 'import { createRequire as __piCreateRequire } from "node:module"; const require = __piCreateRequire(import.meta.url);',
 };
 const allowedExternalPackages = new Set([
+	"@earendil-works/chord",
+	"@earendil-works/chord/bundler",
+	"@earendil-works/chord/context",
+	"@earendil-works/chord/delta",
+	"@earendil-works/chord/node",
 	"@silvia-odwyer/photon-node",
+	"undici",
 	"jiti",
 	// Optional native accelerators. Their callers fall back to JavaScript when absent.
 	"bufferutil",
 	"utf-8-validate",
+	// Optional native proxy authentication. Its caller reports an install hint when absent.
+	"kerberos",
 	// Optional debug output coloring.
 	"supports-color",
 ]);
@@ -67,7 +75,7 @@ const httpsProxyAgentNamedExportPlugin = {
 			() => ({
 				contents: 'export { HttpsProxyAgent } from "https-proxy-agent";',
 				loader: "js",
-				resolveDir: codingAgentDir,
+				resolveDir: aiDistDir,
 			}),
 		);
 	},
@@ -79,7 +87,7 @@ function commonBuildOptions() {
 		banner,
 		bundle: true,
 		define: { PI_BUNDLED_NODE: "true" },
-		external: ["@silvia-odwyer/photon-node"],
+		external: ["@earendil-works/chord", "@silvia-odwyer/photon-node", "undici"],
 		format: "esm",
 		legalComments: "none",
 		logLevel: "warning",
@@ -146,7 +154,6 @@ for (const entry of [
 	join(codingAgentDistDir, "cli.js"),
 	join(codingAgentDistDir, "index.js"),
 	join(codingAgentDistDir, "rpc-entry.js"),
-	join(codingAgentDistDir, "client", "index.js"),
 	join(codingAgentDistDir, "utils", "image-resize-worker.js"),
 	join(aiDistDir, "api", "bedrock-converse-stream.js"),
 	join(aiDistDir, "auth", "oauth", "anthropic.js"),
@@ -164,7 +171,6 @@ const mainResult = await build({
 	entryNames: "[name]",
 	entryPoints: {
 		cli: join(codingAgentDistDir, "cli.js"),
-		client: join(codingAgentDistDir, "client", "index.js"),
 		index: join(codingAgentDistDir, "index.js"),
 		"rpc-entry": join(codingAgentDistDir, "rpc-entry.js"),
 	},

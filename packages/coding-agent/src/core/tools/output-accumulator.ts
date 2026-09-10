@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { createWriteStream, type WriteStream } from "node:fs";
+import { createWriteStream, mkdirSync, type WriteStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, type TruncationResult, truncateTail } from "./truncate.ts";
@@ -8,6 +8,7 @@ export interface OutputAccumulatorOptions {
 	maxLines?: number;
 	maxBytes?: number;
 	tempFilePrefix?: string;
+	temporaryOutputDirectory?: string;
 	persistFullOutput?: boolean;
 }
 
@@ -17,9 +18,12 @@ export interface OutputSnapshot {
 	fullOutputPath?: string;
 }
 
-function defaultTempFilePath(prefix: string): string {
+export function createTempOutputFilePath(prefix: string, directory?: string): string {
+	if (directory) {
+		mkdirSync(directory, { recursive: true, mode: 0o700 });
+	}
 	const id = randomBytes(8).toString("hex");
-	return join(tmpdir(), `${prefix}-${id}.log`);
+	return join(directory ?? tmpdir(), `${prefix}-${id}.log`);
 }
 
 function byteLength(text: string): number {
@@ -38,6 +42,7 @@ export class OutputAccumulator {
 	private readonly maxBytes: number;
 	private readonly maxRollingBytes: number;
 	private readonly tempFilePrefix: string;
+	private readonly temporaryOutputDirectory: string | undefined;
 	private readonly persistFullOutput: boolean;
 	private readonly decoder = new TextDecoder();
 
@@ -61,6 +66,7 @@ export class OutputAccumulator {
 		this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
 		this.maxRollingBytes = Math.max(this.maxBytes * 2, 1);
 		this.tempFilePrefix = options.tempFilePrefix ?? "pi-output";
+		this.temporaryOutputDirectory = options.temporaryOutputDirectory;
 		this.persistFullOutput = options.persistFullOutput ?? true;
 	}
 
@@ -215,8 +221,8 @@ export class OutputAccumulator {
 		if (this.tempFilePath) {
 			return;
 		}
-		this.tempFilePath = defaultTempFilePath(this.tempFilePrefix);
-		this.tempFileStream = createWriteStream(this.tempFilePath);
+		this.tempFilePath = createTempOutputFilePath(this.tempFilePrefix, this.temporaryOutputDirectory);
+		this.tempFileStream = createWriteStream(this.tempFilePath, { mode: 0o600 });
 		for (const chunk of this.rawChunks) {
 			this.tempFileStream.write(chunk);
 		}

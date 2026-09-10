@@ -12,21 +12,7 @@
         bytes[i] = binary.charCodeAt(i);
       }
       const data = JSON.parse(new TextDecoder('utf-8').decode(bytes));
-      const { header, entries, leafId: defaultLeafId, systemPrompt, tools, renderedTools } = data;
-
-      // ============================================================
-      // URL PARAMETER HANDLING
-      // ============================================================
-
-      // Parse URL parameters for deep linking: leafId and targetId
-      // Check for injected params (when loaded in iframe via srcdoc) or use window.location
-      const injectedParams = document.querySelector('meta[name="pi-url-params"]');
-      const searchString = injectedParams ? injectedParams.content : window.location.search.substring(1);
-      const urlParams = new URLSearchParams(searchString);
-      const urlLeafId = urlParams.get('leafId');
-      const urlTargetId = urlParams.get('targetId');
-      // Use URL leafId if provided, otherwise fall back to session default
-      const leafId = urlLeafId || defaultLeafId;
+      const { header, entries, leafId, systemPrompt, tools, renderedTools } = data;
 
       // ============================================================
       // DATA STRUCTURES
@@ -706,7 +692,7 @@
       // ============================================================
 
       let currentLeafId = leafId;
-      let currentTargetId = urlTargetId || leafId;
+      let currentTargetId = leafId;
       let treeRendered = false;
 
       function renderTree() {
@@ -1089,93 +1075,10 @@
         URL.revokeObjectURL(url);
       }
 
-      /**
-       * Build a shareable URL for a specific message.
-       * URL format: base?gistId&leafId=<leafId>&targetId=<entryId>
-       */
-      function buildShareUrl(entryId) {
-        // Check for injected base URL (used when loaded in iframe via srcdoc)
-        const baseUrlMeta = document.querySelector('meta[name="pi-share-base-url"]');
-        const baseUrl = baseUrlMeta ? baseUrlMeta.content : window.location.href.split('?')[0];
-
-        const url = new URL(window.location.href);
-        // Find the gist ID (first query param without value, e.g., ?abc123)
-        const gistId = Array.from(url.searchParams.keys()).find(k => !url.searchParams.get(k));
-
-        // Build the share URL
-        const params = new URLSearchParams();
-        params.set('leafId', currentLeafId);
-        params.set('targetId', entryId);
-
-        // If we have an injected base URL (iframe context), use it directly
-        if (baseUrlMeta) {
-          return `${baseUrl}&${params.toString()}`;
-        }
-
-        // Otherwise build from current location (direct file access)
-        url.search = gistId ? `?${gistId}&${params.toString()}` : `?${params.toString()}`;
-        return url.toString();
-      }
-
-      /**
-       * Copy text to clipboard with visual feedback.
-       * Uses navigator.clipboard with fallback to execCommand for HTTP contexts.
-       */
-      async function copyToClipboard(text, button) {
-        let success = false;
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(text);
-            success = true;
-          }
-        } catch (err) {
-          // Clipboard API failed, try fallback
-        }
-
-        // Fallback for HTTP or when Clipboard API is unavailable
-        if (!success) {
-          try {
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.select();
-            success = document.execCommand('copy');
-            document.body.removeChild(textarea);
-          } catch (err) {
-            console.error('Failed to copy:', err);
-          }
-        }
-
-        if (success && button) {
-          const originalHtml = button.innerHTML;
-          button.innerHTML = '✓';
-          button.classList.add('copied');
-          setTimeout(() => {
-            button.innerHTML = originalHtml;
-            button.classList.remove('copied');
-          }, 1500);
-        }
-      }
-
-      /**
-       * Render the copy-link button HTML for a message.
-       */
-      function renderCopyLinkButton(entryId) {
-        return `<button class="copy-link-btn" data-entry-id="${escapeHtml(entryId)}" title="Copy link to this message">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-          </svg>
-        </button>`;
-      }
-
       function renderEntry(entry) {
         const ts = formatTimestamp(entry.timestamp);
         const tsHtml = ts ? `<div class="message-timestamp">${ts}</div>` : '';
         const entryDomId = `entry-${escapeHtml(entry.id)}`;
-        const copyBtnHtml = renderCopyLinkButton(entry.id);
 
         if (entry.type === 'message') {
           const msg = entry.message;
@@ -1190,7 +1093,7 @@
               // Collect images from content array
               const images = Array.isArray(content) ? content.filter(c => c.type === 'image') : [];
               const hasUserContent = skillBlock.userMessage || images.length > 0;
-              let html = `<div class="skill-user-entry" id="${entryDomId}">${copyBtnHtml}${tsHtml}`;
+              let html = `<div class="skill-user-entry" id="${entryDomId}">${tsHtml}`;
 
               // Skill invocation (collapsed by default, click to expand)
               html += `<div class="skill-invocation" onclick="if(window.getSelection().toString())return;this.classList.toggle('expanded')">
@@ -1220,7 +1123,7 @@
             }
 
             // No skill block - normal user message
-            let html = `<div class="user-message" id="${entryDomId}">${copyBtnHtml}${tsHtml}`;
+            let html = `<div class="user-message" id="${entryDomId}">${tsHtml}`;
 
             if (Array.isArray(content)) {
               const images = content.filter(c => c.type === 'image');
@@ -1241,7 +1144,7 @@
           }
 
           if (msg.role === 'assistant') {
-            let html = `<div class="assistant-message" id="${entryDomId}">${copyBtnHtml}${tsHtml}`;
+            let html = `<div class="assistant-message" id="${entryDomId}">${tsHtml}`;
 
             for (const block of msg.content) {
               if (block.type === 'text' && block.text.trim()) {
@@ -1516,16 +1419,6 @@
         messagesEl.innerHTML = '';
         messagesEl.appendChild(fragment);
 
-        // Attach click handlers for copy-link buttons
-        messagesEl.querySelectorAll('.copy-link-btn').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const entryId = btn.dataset.entryId;
-            const shareUrl = buildShareUrl(entryId);
-            copyToClipboard(shareUrl, btn);
-          });
-        });
-
         // Use setTimeout(0) to ensure DOM is fully laid out before scrolling
         setTimeout(() => {
           const content = document.getElementById('content');
@@ -1663,7 +1556,7 @@
       const overlay = document.getElementById('sidebar-overlay');
       const hamburger = document.getElementById('hamburger');
       const sidebarResizer = document.getElementById('sidebar-resizer');
-      const SIDEBAR_WIDTH_STORAGE_KEY = 'pi-share:v1:sidebar-width';
+      const SIDEBAR_WIDTH_STORAGE_KEY = 'pi-export:v1:sidebar-width';
       const MIN_CONTENT_WIDTH = 320;
 
       function isMobileLayout() {
@@ -1849,14 +1742,8 @@
       });
 
       // Initial render
-      // If URL has targetId, scroll to that specific message; otherwise stay at top
       if (leafId) {
-        if (urlTargetId && byId.has(urlTargetId)) {
-          // Deep link: navigate to leaf and scroll to target message
-          navigateTo(leafId, 'target', urlTargetId);
-        } else {
-          navigateTo(leafId, 'none');
-        }
+        navigateTo(leafId, 'none');
       } else if (entries.length > 0) {
         // Fallback: use last entry if no leafId
         navigateTo(entries[entries.length - 1].id, 'none');

@@ -144,7 +144,7 @@ describe("AgentSession prompt characterization", () => {
 		expect(sawImage).toBe(true);
 	});
 
-	it("expands skill commands before sending the prompt", async () => {
+	it("expands user-only skill commands before sending the prompt", async () => {
 		const tempDir = join(tmpdir(), `pi-skill-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
 		tempDirs.push(tempDir);
@@ -159,7 +159,7 @@ describe("AgentSession prompt characterization", () => {
 						name: "test",
 						description: "Test skill",
 						filePath: skillPath,
-						disableModelInvocation: false,
+						disableModelInvocation: true,
 						baseDir: tempDir,
 						sourceInfo: createSyntheticSourceInfo(skillPath, {
 							source: "local",
@@ -191,7 +191,7 @@ describe("AgentSession prompt characterization", () => {
 		expect(expandedPrompt).toContain("explain this");
 	});
 
-	it("expands inline skill mentions before sending the prompt", async () => {
+	it("expands inline user-only skill mentions before sending the prompt", async () => {
 		const tempDir = join(tmpdir(), `pi-skills-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tempDir, { recursive: true });
 		tempDirs.push(tempDir);
@@ -204,7 +204,7 @@ describe("AgentSession prompt characterization", () => {
 			name,
 			description,
 			filePath,
-			disableModelInvocation: false,
+			disableModelInvocation: true,
 			baseDir: tempDir,
 			sourceInfo: createSyntheticSourceInfo(filePath, {
 				source: "local",

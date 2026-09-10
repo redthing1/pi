@@ -38,11 +38,9 @@ describe("export HTML markdown link sanitization", () => {
 	});
 
 	it("escapes entry IDs before inserting them into attributes", () => {
-		// Session entry IDs are embedded in id and data-entry-id attributes.
+		// Session entry IDs are embedded in id attributes.
 		expect(templateJs).not.toMatch(/id="\$\{entryId\}"/);
-		expect(templateJs).not.toMatch(/data-entry-id="\$\{entryId\}"/);
 		expect(templateJs).toMatch(/entry-\$\{escapeHtml\(entry\.id\)\}/);
-		expect(templateJs).toMatch(/data-entry-id="\$\{escapeHtml\(entryId\)\}"/);
 	});
 
 	it("escapes tree metadata rendered from session fields", () => {

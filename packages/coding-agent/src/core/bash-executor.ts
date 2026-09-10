@@ -6,13 +6,11 @@
  * - Direct calls from modes that need bash execution
  */
 
-import { randomBytes } from "node:crypto";
 import { createWriteStream, type WriteStream } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { stripAnsi } from "../utils/ansi.ts";
 import { sanitizeBinaryOutput } from "../utils/shell.ts";
 import type { BashOperations } from "./tools/bash.ts";
+import { createTempOutputFilePath } from "./tools/output-accumulator.ts";
 import { DEFAULT_MAX_BYTES, truncateTail } from "./tools/truncate.ts";
 
 // ============================================================================
@@ -24,6 +22,8 @@ export interface BashExecutorOptions {
 	onChunk?: (chunk: string) => void;
 	/** AbortSignal for cancellation */
 	signal?: AbortSignal;
+	/** Directory owned by the active session for temporary full-output files. */
+	temporaryOutputDirectory?: string;
 }
 
 export interface BashResult {
@@ -66,12 +66,29 @@ export async function executeBashWithOperations(
 		if (!persistLocally || tempFilePath) {
 			return;
 		}
-		const id = randomBytes(8).toString("hex");
-		tempFilePath = join(tmpdir(), `pi-bash-${id}.log`);
-		tempFileStream = createWriteStream(tempFilePath);
+		tempFilePath = createTempOutputFilePath("pi-bash", options?.temporaryOutputDirectory);
+		tempFileStream = createWriteStream(tempFilePath, { mode: 0o600 });
 		for (const chunk of outputChunks) {
 			tempFileStream.write(chunk);
 		}
+	};
+	const closeTempFile = async () => {
+		if (!tempFileStream) return;
+		const stream = tempFileStream;
+		tempFileStream = undefined;
+		await new Promise<void>((resolve, reject) => {
+			const onError = (error: Error) => {
+				stream.off("finish", onFinish);
+				reject(error);
+			};
+			const onFinish = () => {
+				stream.off("error", onError);
+				resolve();
+			};
+			stream.once("error", onError);
+			stream.once("finish", onFinish);
+			stream.end();
+		});
 	};
 
 	const decoder = new TextDecoder();
@@ -116,9 +133,7 @@ export async function executeBashWithOperations(
 		if (truncationResult.truncated) {
 			ensureTempFile();
 		}
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		await closeTempFile();
 		const cancelled = options?.signal?.aborted ?? false;
 
 		return {
@@ -136,9 +151,7 @@ export async function executeBashWithOperations(
 			if (truncationResult.truncated) {
 				ensureTempFile();
 			}
-			if (tempFileStream) {
-				tempFileStream.end();
-			}
+			await closeTempFile();
 			return {
 				output: truncationResult.truncated ? truncationResult.content : fullOutput,
 				exitCode: undefined,
@@ -148,9 +161,7 @@ export async function executeBashWithOperations(
 			};
 		}
 
-		if (tempFileStream) {
-			tempFileStream.end();
-		}
+		await closeTempFile();
 
 		throw err;
 	}

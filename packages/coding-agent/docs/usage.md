@@ -55,7 +55,6 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/copy` | Copy last assistant message to clipboard |
 | `/export [file]` | Export session to HTML or JSONL |
 | `/import <file>` | Import and resume a session from a JSONL file |
-| `/share` | Upload as private GitHub gist with shareable HTML link |
 | `/reload` | Reload keybindings, extensions, skills, prompts, themes, and context files |
 | `/hotkeys` | Show all keyboard shortcuts |
 | `/changelog` | Display version history |
@@ -128,20 +127,16 @@ Non-interactive modes (`-p`, `--mode json`, and `--mode rpc`) do not show a trus
 
 If no extension or saved decision applies, `defaultProjectTrust` controls the fallback behavior. Set it to `"ask"`, `"always"`, or `"never"` in `~/.pi/agent/settings.json`, or change it with `/settings`.
 
-`pi config` and package commands use the same project trust flow, except `pi update` never prompts. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
+`pi config`, `pi install`, `pi remove`, and `pi list` use the same project trust flow. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them. `pi update --models` only refreshes provider catalogs and does not load project resources.
 
 Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.pi/agent/trust.json` only; the current session is not reloaded, so restart pi for changes to take effect.
 
 
-## Exporting and Sharing Sessions
+## Exporting Sessions
 
 Use `/export [file]` to write a session to HTML, or specify a `.jsonl` path for JSONL. Use `/import <file.jsonl>` to load a JSONL session.
 
-In client ZDR mode, export requires an explicit destination but does not restrict its location. Import loads detached in memory without copying or modifying the source. Session resume, forking, sharing, and debug-log persistence remain disabled.
-
-Use `/share` to upload a private GitHub gist with a shareable HTML link.
-
-If you use pi for open source work and want to publish sessions for model, prompt, tool, and evaluation research, see [`badlogic/pi-share-hf`](https://github.com/badlogic/pi-share-hf). It publishes sessions to Hugging Face datasets.
+In client ZDR mode, export requires an explicit destination but does not restrict its location. Import loads detached in memory without copying or modifying the source. Session resume, forking, and debug-log persistence remain disabled.
 
 ## CLI Reference
 
@@ -155,16 +150,12 @@ pi [options] [--] [@files...] [messages...]
 pi install <source> [-l]     # Install package, -l for project-local
 pi remove <source> [-l]      # Remove package
 pi uninstall <source> [-l]   # Alias for remove
-pi update [source|self|pi]   # Report package and fork self-update policies
-pi update --all              # Report package and fork self-update policies
-pi update --extensions       # Report the local-only package update policy
-pi update --self             # Show fork self-update policy
-pi update --extension <src>  # Check one local package path
+pi update --models           # Explicitly refresh model catalogs
 pi list                      # List installed packages
 pi config                    # Enable/disable package resources
 ```
 
-These commands manage pi packages only. Remote package updates and self-update are disabled in this fork; pi never downloads or installs package or update code. Use only reviewed local builds and already-present local package paths. `pi config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. `pi update` never prompts for project trust.
+Install, remove, list, and config manage local pi packages. Remote package updates and self-update do not exist in this fork; pi never downloads or installs package or update code. Use only reviewed local builds and already-present local package paths. `pi config` and project package commands accept `--approve`/`--no-approve` to trust or ignore project-local settings for one command. `pi update --models` is the separate, explicit provider-catalog refresh operation.
 
 See [Pi Packages](packages.md) for package sources and security notes.
 
@@ -316,7 +307,6 @@ pi --exclude-tools ask_question
 | `PI_CODING_AGENT_SESSION_DIR` | Override session storage directory; overridden by `--session-dir` |
 | `PI_PACKAGE_DIR` | Override package directory, useful for Nix/Guix store paths |
 | `PI_OFFLINE` | Disable startup network operations, including provider model refresh |
-| `PI_SKIP_VERSION_CHECK` | Compatibility flag; version polling is disabled in this fork |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache where supported |
 | `VISUAL`, `EDITOR` | Fallback external editor for Ctrl+G when `externalEditor` is unset; defaults to Notepad on Windows and `nano` elsewhere |
 

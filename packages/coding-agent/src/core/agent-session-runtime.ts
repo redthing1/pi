@@ -1,5 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { constants, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { basename, join, parse, resolve } from "node:path";
 import { resolvePath } from "../utils/paths.ts";
 import type { AgentSession } from "./agent-session.ts";
 import type { AgentSessionRuntimeDiagnostic, AgentSessionServices } from "./agent-session-services.ts";
@@ -376,20 +376,30 @@ export class AgentSessionRuntime {
 
 		const inMemory = this.session.privacy.clientZdr;
 		const sessionDir = this.session.sessionManager.getSessionDir();
-		const destinationPath = inMemory ? resolvedPath : join(sessionDir, basename(resolvedPath));
+		let destinationPath = resolvedPath;
+		let sourceAlreadyStored = true;
+		if (!inMemory) {
+			if (!existsSync(sessionDir)) {
+				mkdirSync(sessionDir, { recursive: true });
+			}
+			destinationPath = join(sessionDir, basename(resolvedPath));
+			sourceAlreadyStored = resolve(destinationPath) === resolvedPath;
+			if (!sourceAlreadyStored) {
+				const { name, ext } = parse(destinationPath);
+				let suffix = 1;
+				while (existsSync(destinationPath)) {
+					destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
+				}
+			}
+		}
 		const beforeResult = await this.emitBeforeSwitch("resume", destinationPath);
 		if (beforeResult.cancelled) {
 			return beforeResult;
 		}
 
 		const previousSessionFile = this.session.sessionFile;
-		if (!inMemory) {
-			if (!existsSync(sessionDir)) {
-				mkdirSync(sessionDir, { recursive: true });
-			}
-			if (resolve(destinationPath) !== resolvedPath) {
-				copyFileSync(resolvedPath, destinationPath);
-			}
+		if (!inMemory && !sourceAlreadyStored) {
+			copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);
 		}
 
 		const sessionManager = inMemory
