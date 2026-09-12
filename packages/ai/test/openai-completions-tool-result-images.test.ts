@@ -78,6 +78,28 @@ function buildEmptyToolResult(toolCallId: string, timestamp: number): ToolResult
 }
 
 describe("openai-completions convertMessages", () => {
+	it("omits malformed base64 images", () => {
+		const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini");
+		const model: Model<"openai-completions"> = {
+			...baseModel,
+			api: "openai-completions",
+			input: ["text", "image"],
+		};
+		const context: Context = {
+			messages: [
+				{
+					role: "user",
+					content: [{ type: "image", data: "%%%not-base64%%%", mimeType: "image/png" }],
+					timestamp: Date.now(),
+				},
+			],
+		};
+
+		expect(convertMessages(model, context, compat)[0]?.content).toEqual([
+			{ type: "text", text: "(image omitted: invalid base64 data)" },
+		]);
+	});
+
 	it("batches tool-result images after consecutive tool results", () => {
 		const { compat: _compat, ...baseModel } = getModel("openai", "gpt-4o-mini");
 		const model: Model<"openai-completions"> = {

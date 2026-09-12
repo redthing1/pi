@@ -125,8 +125,17 @@ function isToolCallBlock(block: { type: string }): block is ToolCall {
 	return block.type === "toolCall";
 }
 
-function isImageContentBlock(block: { type: string }): block is ImageContent {
-	return block.type === "image";
+const base64ImagePattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+function isImageContentBlock(block: { type: string; data?: unknown; mimeType?: unknown }): block is ImageContent {
+	return (
+		block.type === "image" &&
+		typeof block.data === "string" &&
+		block.data.length > 0 &&
+		typeof block.mimeType === "string" &&
+		block.mimeType.length > 0 &&
+		base64ImagePattern.test(block.data)
+	);
 }
 
 function isReasoningDetailObject(detail: unknown): detail is Record<string, unknown> {
@@ -1255,7 +1264,7 @@ export function convertMessages(
 							type: "text",
 							text: sanitizeSurrogates(item.text),
 						} satisfies ChatCompletionContentPartText;
-					} else {
+					} else if (isImageContentBlock(item)) {
 						return {
 							type: "image_url",
 							image_url: {
@@ -1263,6 +1272,7 @@ export function convertMessages(
 							},
 						} satisfies ChatCompletionContentPartImage;
 					}
+					return { type: "text", text: "(image omitted: invalid base64 data)" };
 				});
 				if (content.length === 0) continue;
 				params.push({
@@ -1398,7 +1408,7 @@ export function convertMessages(
 					.filter(isTextContentBlock)
 					.map((block) => block.text)
 					.join("\n");
-				const hasImages = toolMsg.content.some((c) => c.type === "image");
+				const hasImages = toolMsg.content.some(isImageContentBlock);
 
 				// Always send tool result with text (or placeholder if only images)
 				const hasText = textResult.length > 0;
