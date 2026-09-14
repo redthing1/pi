@@ -22,13 +22,14 @@ import { DefaultPackageManager, type PathMetadata, type ResolvedResource } from 
 import type { PromptTemplate } from "./prompt-templates.ts";
 import { loadPromptTemplates } from "./prompt-templates.ts";
 import { SettingsManager } from "./settings-manager.ts";
-import type { Skill } from "./skills.ts";
-import { loadSkills } from "./skills.ts";
+import type { Skill, SkillDocument } from "./skills.ts";
+import { loadSkillDocuments, loadSkills } from "./skills.ts";
 import { createSourceInfo, type SourceInfo } from "./source-info.ts";
 import { resetTimings } from "./timings.ts";
 
 export interface ResourceExtensionPaths {
 	skillPaths?: Array<{ path: string; metadata: PathMetadata }>;
+	skillReplacement?: { documents: SkillDocument[]; source: string };
 	promptPaths?: Array<{ path: string; metadata: PathMetadata }>;
 	themePaths?: Array<{ path: string; metadata: PathMetadata }>;
 }
@@ -352,7 +353,11 @@ export class DefaultResourceLoader implements ResourceLoader {
 			this.extensionThemeSourceInfos.set(entry.path, createSourceInfo(entry.path, entry.metadata));
 		}
 
-		if (skillPaths.length > 0) {
+		if (paths.skillReplacement) {
+			const result = loadSkillDocuments(paths.skillReplacement.documents, paths.skillReplacement.source);
+			this.skills = result.skills;
+			this.skillDiagnostics = result.diagnostics;
+		} else if (skillPaths.length > 0) {
 			this.lastSkillPaths = this.mergePaths(
 				this.lastSkillPaths,
 				skillPaths.map((entry) => entry.path),

@@ -12,6 +12,7 @@ import type { ModelRegistry } from "../model-registry.ts";
 import type { ScopedModel } from "../model-resolver.ts";
 import { DEFAULT_PRIVACY_MODE, type PrivacyMode } from "../privacy.ts";
 import type { SessionManager } from "../session-manager.ts";
+import type { SkillDocument } from "../skills.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
 import type {
 	BashLaunchEvent,
@@ -1286,11 +1287,13 @@ export class ExtensionRunner {
 		reason: ResourcesDiscoverEvent["reason"],
 	): Promise<{
 		skillPaths: Array<{ path: string; extensionPath: string }>;
+		skillReplacement: { documents: SkillDocument[]; extensionPath: string } | undefined;
 		promptPaths: Array<{ path: string; extensionPath: string }>;
 		themePaths: Array<{ path: string; extensionPath: string }>;
 	}> {
 		const ctx = this.createContext();
 		const skillPaths: Array<{ path: string; extensionPath: string }> = [];
+		let skillReplacement: { documents: SkillDocument[]; extensionPath: string } | undefined;
 		const promptPaths: Array<{ path: string; extensionPath: string }> = [];
 		const themePaths: Array<{ path: string; extensionPath: string }> = [];
 
@@ -1306,6 +1309,17 @@ export class ExtensionRunner {
 
 					if (result?.skillPaths?.length) {
 						skillPaths.push(...result.skillPaths.map((path) => ({ path, extensionPath: ext.path })));
+					}
+					if (result?.replaceSkills !== undefined) {
+						if (skillReplacement) {
+							this.emitError({
+								extensionPath: ext.path,
+								event: "resources_discover",
+								error: `Skills were already replaced by ${skillReplacement.extensionPath}`,
+							});
+						} else {
+							skillReplacement = { documents: result.replaceSkills, extensionPath: ext.path };
+						}
 					}
 					if (result?.promptPaths?.length) {
 						promptPaths.push(...result.promptPaths.map((path) => ({ path, extensionPath: ext.path })));
@@ -1326,7 +1340,7 @@ export class ExtensionRunner {
 			}
 		}
 
-		return { skillPaths, promptPaths, themePaths };
+		return { skillPaths, skillReplacement, promptPaths, themePaths };
 	}
 
 	/** Emit input event. Transforms chain, "handled" short-circuits. */

@@ -83,6 +83,18 @@ describe("buildSystemPrompt", () => {
 			);
 			expect(prompt).toContain("environment variables (docs/environment-variables.md)");
 		});
+
+		test("can omit local Pi documentation paths", () => {
+			const prompt = buildSystemPrompt({
+				contextFiles: [],
+				skills: [],
+				cwd: "/remote/workspace",
+				includePiDocumentation: false,
+			});
+
+			expect(prompt).not.toContain("Pi documentation");
+			expect(prompt).not.toContain("Additional docs:");
+		});
 	});
 
 	describe("custom tool snippets", () => {

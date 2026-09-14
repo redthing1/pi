@@ -78,6 +78,14 @@ export interface Skill {
 	baseDir: string;
 	sourceInfo: SourceInfo;
 	disableModelInvocation: boolean;
+	/** In-memory source for skills supplied by an extension instead of the local filesystem. */
+	content?: string;
+}
+
+export interface SkillDocument {
+	path: string;
+	content: string;
+	scope: "user" | "project";
 }
 
 export interface LoadSkillsResult {
@@ -133,7 +141,15 @@ export interface LoadSkillsFromDirOptions {
 	source: string;
 }
 
-function createSkillSourceInfo(filePath: string, baseDir: string, source: string): SourceInfo {
+function createSkillSourceInfo(
+	filePath: string,
+	baseDir: string,
+	source: string,
+	scope?: SkillDocument["scope"],
+): SourceInfo {
+	if (scope) {
+		return createSyntheticSourceInfo(filePath, { source, scope, baseDir });
+	}
 	switch (source) {
 		case "user":
 			return createSyntheticSourceInfo(filePath, {
@@ -278,17 +294,24 @@ function loadSkillFromFile(
 	filePath: string,
 	source: string,
 ): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
-	const diagnostics: ResourceDiagnostic[] = [];
-	const isDeclaredSkill = basename(filePath) === "SKILL.md";
-
 	let rawContent: string;
 	try {
 		rawContent = readFileSync(filePath, "utf-8");
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "failed to read skill file";
-		diagnostics.push({ type: "warning", message, path: filePath });
-		return { skill: null, diagnostics };
+		return { skill: null, diagnostics: [{ type: "warning", message, path: filePath }] };
 	}
+	return loadSkillFromContent(filePath, rawContent, source);
+}
+
+function loadSkillFromContent(
+	filePath: string,
+	rawContent: string,
+	source: string,
+	options?: { scope: SkillDocument["scope"]; retainContent: boolean },
+): { skill: Skill | null; diagnostics: ResourceDiagnostic[] } {
+	const diagnostics: ResourceDiagnostic[] = [];
+	const isDeclaredSkill = basename(filePath) === "SKILL.md";
 
 	let frontmatter: SkillFrontmatter;
 	try {
@@ -337,11 +360,59 @@ function loadSkillFromFile(
 			description,
 			filePath,
 			baseDir: skillDir,
-			sourceInfo: createSkillSourceInfo(filePath, skillDir, source),
+			sourceInfo: createSkillSourceInfo(filePath, skillDir, source, options?.scope),
 			disableModelInvocation: frontmatter["disable-model-invocation"] === true,
+			...(options?.retainContent ? { content: rawContent } : {}),
 		},
 		diagnostics,
 	};
+}
+
+function addSkill(
+	skill: Skill,
+	skills: Map<string, Skill>,
+	seenPaths: Set<string>,
+	identity: string,
+): ResourceDiagnostic | undefined {
+	if (seenPaths.has(identity)) return;
+	const existing = skills.get(skill.name);
+	if (existing) {
+		return {
+			type: "collision",
+			message: `name "${skill.name}" collision`,
+			path: skill.filePath,
+			collision: {
+				resourceType: "skill",
+				name: skill.name,
+				winnerPath: existing.filePath,
+				loserPath: skill.filePath,
+			},
+		};
+	}
+	skills.set(skill.name, skill);
+	seenPaths.add(identity);
+}
+
+/** Parse extension-provided skill documents with ordinary Pi validation and collision handling. */
+export function loadSkillDocuments(documents: SkillDocument[], source: string): LoadSkillsResult {
+	const skills = new Map<string, Skill>();
+	const seenPaths = new Set<string>();
+	const diagnostics: ResourceDiagnostic[] = [];
+	const collisions: ResourceDiagnostic[] = [];
+
+	for (const document of documents) {
+		const result = loadSkillFromContent(document.path, document.content, source, {
+			scope: document.scope,
+			retainContent: true,
+		});
+		diagnostics.push(...result.diagnostics);
+		const skill = result.skill;
+		if (!skill) continue;
+		const collision = addSkill(skill, skills, seenPaths, skill.filePath);
+		if (collision) collisions.push(collision);
+	}
+
+	return { skills: [...skills.values()], diagnostics: [...diagnostics, ...collisions] };
 }
 
 /**
@@ -421,31 +492,8 @@ export function loadSkills(options: LoadSkillsOptions): LoadSkillsResult {
 	function addSkills(result: LoadSkillsResult) {
 		allDiagnostics.push(...result.diagnostics);
 		for (const skill of result.skills) {
-			// Resolve symlinks to detect duplicate files
-			const realPath = canonicalizePath(skill.filePath);
-
-			// Skip silently if we've already loaded this exact file (via symlink)
-			if (realPathSet.has(realPath)) {
-				continue;
-			}
-
-			const existing = skillMap.get(skill.name);
-			if (existing) {
-				collisionDiagnostics.push({
-					type: "collision",
-					message: `name "${skill.name}" collision`,
-					path: skill.filePath,
-					collision: {
-						resourceType: "skill",
-						name: skill.name,
-						winnerPath: existing.filePath,
-						loserPath: skill.filePath,
-					},
-				});
-			} else {
-				skillMap.set(skill.name, skill);
-				realPathSet.add(realPath);
-			}
+			const collision = addSkill(skill, skillMap, realPathSet, canonicalizePath(skill.filePath));
+			if (collision) collisionDiagnostics.push(collision);
 		}
 	}
 

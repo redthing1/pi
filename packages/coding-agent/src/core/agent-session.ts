@@ -1811,7 +1811,7 @@ export class AgentSession {
 		if (!skill) return text; // Unknown skill, pass through
 
 		try {
-			const content = readFileSync(skill.filePath, "utf-8");
+			const content = skill.content ?? readFileSync(skill.filePath, "utf-8");
 			const body = stripFrontmatter(content).trim();
 			const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
 			return args ? `${skillBlock}\n\n${args}` : skillBlock;
@@ -1841,7 +1841,7 @@ export class AgentSession {
 
 			seenSkillNames.add(skillName);
 			try {
-				const content = readFileSync(skill.filePath, "utf-8");
+				const content = skill.content ?? readFileSync(skill.filePath, "utf-8");
 				const body = stripFrontmatter(content).trim();
 				skillInvocations.push({
 					name: skill.name,
@@ -2994,17 +2994,21 @@ export class AgentSession {
 			return;
 		}
 
-		const { skillPaths, promptPaths, themePaths } = await this._extensionRunner.emitResourcesDiscover(
-			this._cwd,
-			reason,
-		);
+		const { skillPaths, skillReplacement, promptPaths, themePaths } =
+			await this._extensionRunner.emitResourcesDiscover(this._cwd, reason);
 
-		if (skillPaths.length === 0 && promptPaths.length === 0 && themePaths.length === 0) {
+		if (!skillReplacement && skillPaths.length === 0 && promptPaths.length === 0 && themePaths.length === 0) {
 			return;
 		}
 
 		const extensionPaths: ResourceExtensionPaths = {
 			skillPaths: this.buildExtensionResourcePaths(skillPaths),
+			skillReplacement: skillReplacement
+				? {
+						documents: skillReplacement.documents,
+						source: this.getExtensionSourceLabel(skillReplacement.extensionPath),
+					}
+				: undefined,
 			promptPaths: this.buildExtensionResourcePaths(promptPaths),
 			themePaths: this.buildExtensionResourcePaths(themePaths),
 		};

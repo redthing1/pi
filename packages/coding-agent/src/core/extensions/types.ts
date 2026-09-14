@@ -64,6 +64,7 @@ import type {
 	SessionEntry,
 	SessionManager,
 } from "../session-manager.ts";
+import type { SkillDocument } from "../skills.ts";
 import type { SlashCommandInfo } from "../slash-commands.ts";
 import type { SourceInfo } from "../source-info.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
@@ -569,6 +570,8 @@ export interface ResourcesDiscoverEvent {
 /** Result from resources_discover event handler */
 export interface ResourcesDiscoverResult {
 	skillPaths?: string[];
+	/** Authoritative skill set for this discovery cycle. An empty array clears local skills. */
+	replaceSkills?: SkillDocument[];
 	promptPaths?: string[];
 	themePaths?: string[];
 }

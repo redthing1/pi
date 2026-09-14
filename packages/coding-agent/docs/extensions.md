@@ -385,6 +385,8 @@ pi.on("resources_discover", async (event, _ctx) => {
 });
 ```
 
+For a virtual or remote workspace, return `replaceSkills` with an ordered array of `{ path, content, scope }` documents. Pi validates these like ordinary skills and keeps the first document when names collide. The array replaces all locally discovered and contributed skills for that cycle; an empty array clears them. Only the first extension that returns `replaceSkills` is accepted.
+
 ### Session Events
 
 See [Session Format](session-format.md) for session storage internals and the SessionManager API.
@@ -545,6 +547,7 @@ pi.on("before_agent_start", async (event, ctx) => {
   //   .cwd - working directory
   //   .contextFiles - AGENTS.md files and other loaded context files
   //   .skills - loaded skills
+  //   .includePiDocumentation - whether the default prompt includes local Pi documentation paths
 
   return {
     // Inject a persistent message (stored in session, sent to LLM)

@@ -285,6 +285,7 @@ export {
 	loadSkills,
 	loadSkillsFromDir,
 	type Skill,
+	type SkillDocument,
 	type SkillFrontmatter,
 } from "./core/skills.ts";
 export { createSyntheticSourceInfo } from "./core/source-info.ts";

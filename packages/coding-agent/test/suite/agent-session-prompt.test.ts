@@ -243,6 +243,56 @@ describe("AgentSession prompt characterization", () => {
 		expect(expandedPrompt).toContain("$5");
 	});
 
+	it("expands in-memory skills without reading their remote paths locally", async () => {
+		const skillPath = "/remote/workspace/.pi/skills/remote/SKILL.md";
+		const content = "---\nname: remote\ndescription: Remote skill\n---\n\nUse remote instructions.";
+		const resourceLoader = {
+			...createTestResourceLoader(),
+			getSkills: () => ({
+				skills: [
+					{
+						name: "remote",
+						description: "Remote skill",
+						filePath: skillPath,
+						content,
+						disableModelInvocation: false,
+						baseDir: "/remote/workspace/.pi/skills/remote",
+						sourceInfo: createSyntheticSourceInfo(skillPath, {
+							source: "extension:/teleport/index.ts",
+							scope: "project",
+							origin: "top-level",
+						}),
+					},
+				],
+				diagnostics: [],
+			}),
+		};
+		const harness = await createHarness({ resourceLoader });
+		harnesses.push(harness);
+		const expandedPrompts: string[] = [];
+
+		harness.setResponses([
+			(context) => {
+				const user = context.messages.find((message) => message.role === "user");
+				expandedPrompts.push(user ? getMessageText(user) : "");
+				return fauxAssistantMessage("first");
+			},
+			(context) => {
+				const user = context.messages.filter((message) => message.role === "user").at(-1);
+				expandedPrompts.push(user ? getMessageText(user) : "");
+				return fauxAssistantMessage("second");
+			},
+		]);
+
+		await harness.session.prompt("/skill:remote explain");
+		await harness.session.prompt("Use $remote now.");
+
+		for (const prompt of expandedPrompts) {
+			expect(prompt).toContain(`<skill name="remote" location="${skillPath}">`);
+			expect(prompt).toContain("Use remote instructions.");
+		}
+	});
+
 	it("expands prompt templates before sending the prompt", async () => {
 		const template: PromptTemplate = {
 			name: "review",
