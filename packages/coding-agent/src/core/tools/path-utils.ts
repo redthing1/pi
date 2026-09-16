@@ -4,6 +4,11 @@ import { normalizePath, resolvePath } from "../../utils/paths.ts";
 
 const NARROW_NO_BREAK_SPACE = "\u202F";
 
+export interface ToolPathOperations {
+	/** Resolve a raw model-provided path. Defaults to local cwd resolution. */
+	resolvePath?: (path: string) => string;
+}
+
 function tryMacOSScreenshotPath(filePath: string): string {
 	return filePath.replace(/ (AM|PM)\./gi, `${NARROW_NO_BREAK_SPACE}$1.`);
 }
@@ -47,6 +52,10 @@ export function expandPath(filePath: string): string {
  */
 export function resolveToCwd(filePath: string, cwd: string): string {
 	return resolvePath(filePath, cwd, { normalizeUnicodeSpaces: true, stripAtPrefix: true });
+}
+
+export function resolveToolPath(filePath: string, cwd: string, operations: ToolPathOperations): string {
+	return operations.resolvePath?.(filePath) ?? resolveToCwd(filePath, cwd);
 }
 
 export function resolveReadPath(filePath: string, cwd: string): string {

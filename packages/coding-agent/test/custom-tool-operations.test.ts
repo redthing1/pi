@@ -1,7 +1,15 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { executeBashWithOperations } from "../src/core/bash-executor.ts";
-import { buildSystemPrompt, createBashTool, createEditTool, createReadTool, createWriteTool } from "../src/index.ts";
+import {
+	buildSystemPrompt,
+	createBashTool,
+	createEditTool,
+	createFindTool,
+	createLsTool,
+	createReadTool,
+	createWriteTool,
+} from "../src/index.ts";
 
 describe("custom tool operation isolation", () => {
 	it("exports the structured system prompt builder", () => {
@@ -30,6 +38,59 @@ describe("custom tool operation isolation", () => {
 
 		expect(receivedPaths).toEqual([join(cwd, requestedPath), join(cwd, requestedPath)]);
 		expect(result.content).toEqual([{ type: "text", text: "remote content" }]);
+	});
+
+	it("lets custom file backends interpret raw model paths", async () => {
+		const resolverInputs: string[] = [];
+		const backendPaths: string[] = [];
+		const resolvePath = (path: string): string => {
+			resolverInputs.push(path);
+			return `/home/remote/${path.slice(2)}`;
+		};
+		let content = "before\n";
+		const access = async (path: string): Promise<void> => {
+			backendPaths.push(path);
+		};
+		const readFile = async (path: string): Promise<Buffer> => {
+			backendPaths.push(path);
+			return Buffer.from(content);
+		};
+		const writeFile = async (path: string, next: string): Promise<void> => {
+			backendPaths.push(path);
+			content = next;
+		};
+		const exists = async (path: string): Promise<boolean> => {
+			backendPaths.push(path);
+			return true;
+		};
+		const read = createReadTool("/local/work", { operations: { resolvePath, access, readFile } });
+		const write = createWriteTool("/local/work", {
+			operations: { resolvePath, mkdir: access, writeFile },
+		});
+		const edit = createEditTool("/local/work", { operations: { resolvePath, access, readFile, writeFile } });
+		const ls = createLsTool("/local/work", {
+			operations: {
+				resolvePath,
+				exists,
+				stat: async () => ({ isDirectory: () => true }),
+				readdir: async () => [],
+			},
+		});
+		const find = createFindTool("/local/work", {
+			operations: { resolvePath, exists, glob: async () => [] },
+		});
+
+		await read.execute("read-remote-home", { path: "~/read.txt" });
+		await write.execute("write-remote-home", { path: "~/write.txt", content: "before\n" });
+		await edit.execute("edit-remote-home", {
+			path: "~/edit.txt",
+			edits: [{ oldText: "before", newText: "after" }],
+		});
+		await ls.execute("ls-remote-home", { path: "~/list" });
+		await find.execute("find-remote-home", { path: "~/search", pattern: "*.txt" });
+
+		expect(resolverInputs).toEqual(["~/read.txt", "~/write.txt", "~/edit.txt", "~/list", "~/search"]);
+		expect(backendPaths.every((path) => path === "/home/remote" || path.startsWith("/home/remote/"))).toBe(true);
 	});
 
 	it("lets custom write and edit operations own mutation serialization", async () => {

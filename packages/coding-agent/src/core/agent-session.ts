@@ -2994,10 +2994,16 @@ export class AgentSession {
 			return;
 		}
 
-		const { skillPaths, skillReplacement, promptPaths, themePaths } =
+		const { skillPaths, skillReplacement, promptPaths, promptReplacement, themePaths } =
 			await this._extensionRunner.emitResourcesDiscover(this._cwd, reason);
 
-		if (!skillReplacement && skillPaths.length === 0 && promptPaths.length === 0 && themePaths.length === 0) {
+		if (
+			!skillReplacement &&
+			!promptReplacement &&
+			skillPaths.length === 0 &&
+			promptPaths.length === 0 &&
+			themePaths.length === 0
+		) {
 			return;
 		}
 
@@ -3010,6 +3016,12 @@ export class AgentSession {
 					}
 				: undefined,
 			promptPaths: this.buildExtensionResourcePaths(promptPaths),
+			promptReplacement: promptReplacement
+				? {
+						documents: promptReplacement.documents,
+						source: this.getExtensionSourceLabel(promptReplacement.extensionPath),
+					}
+				: undefined,
 			themePaths: this.buildExtensionResourcePaths(themePaths),
 		};
 

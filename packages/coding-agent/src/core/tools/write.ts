@@ -4,7 +4,7 @@ import { dirname } from "path";
 import { type Static, Type } from "typebox";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
-import { resolveToCwd } from "./path-utils.ts";
+import { resolveToolPath, type ToolPathOperations } from "./path-utils.ts";
 import { writeRenderers } from "./renderers/write.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -24,7 +24,7 @@ export type WriteToolInput = Static<typeof writeSchema>;
  * Pluggable operations for the write tool.
  * Override these to delegate file writing to remote systems (for example SSH).
  */
-export interface WriteOperations {
+export interface WriteOperations extends ToolPathOperations {
 	/** Write content to a file */
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
 	/** Create directory recursively */
@@ -65,7 +65,7 @@ export function createWriteToolDefinition(
 			_onUpdate?,
 			ctx?: ExtensionContext,
 		) {
-			const absolutePath = resolveToCwd(path, ctx?.cwd ?? cwd);
+			const absolutePath = resolveToolPath(path, ctx?.cwd ?? cwd, ops);
 			const dir = dirname(absolutePath);
 			return mutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the

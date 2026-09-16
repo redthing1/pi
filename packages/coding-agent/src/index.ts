@@ -233,6 +233,7 @@ export {
 	createReadOnlyTools,
 	createReadTool,
 	createWriteTool,
+	type PromptDocument,
 	type PromptTemplate,
 } from "./core/sdk.ts";
 export {

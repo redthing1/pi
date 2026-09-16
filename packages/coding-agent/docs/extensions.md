@@ -385,7 +385,7 @@ pi.on("resources_discover", async (event, _ctx) => {
 });
 ```
 
-For a virtual or remote workspace, return `replaceSkills` with an ordered array of `{ path, content, scope }` documents. Pi validates these like ordinary skills and keeps the first document when names collide. The array replaces all locally discovered and contributed skills for that cycle; an empty array clears them. Only the first extension that returns `replaceSkills` is accepted.
+For a virtual or remote workspace, return `replaceSkills` or `replacePrompts` with ordered arrays of `{ path, content, scope }` documents. Pi parses them like ordinary local resources and keeps the first document when names collide. Each array replaces all locally discovered and contributed resources of that type for the cycle; an empty array clears them. Only the first extension that replaces each resource type is accepted.
 
 ### Session Events
 
@@ -2153,6 +2153,8 @@ pi.registerTool({
 ```
 
 **Operations interfaces:** `ReadOperations`, `WriteOperations`, `EditOperations`, `BashOperations`, `PowerShellOperations`, `LsOperations`, `GrepOperations`, `FindOperations`
+
+File-operation interfaces accept an optional `resolvePath(path)` hook. It receives the raw model-provided path, allowing a remote backend to interpret relative paths and `~` against its own cwd and home. Without it, Pi preserves normal local path resolution.
 
 For `user_bash`, extensions can reuse pi's local shell backend via `createLocalBashOperations()` instead of reimplementing local process spawning, shell resolution, and process-tree termination.
 

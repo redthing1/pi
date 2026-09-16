@@ -6,7 +6,7 @@ import { type Static, Type } from "typebox";
 import { processImage } from "../../utils/image-process.ts";
 import { detectSupportedImageMimeTypeFromFile } from "../../utils/mime.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
-import { resolveReadPathAsync, resolveToCwd } from "./path-utils.ts";
+import { resolveReadPathAsync, resolveToolPath, type ToolPathOperations } from "./path-utils.ts";
 import { readRenderers } from "./renderers/read.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
@@ -32,7 +32,7 @@ export interface ReadToolDetails {
  * Pluggable operations for the read tool.
  * Override these to delegate file reading to remote systems (for example SSH).
  */
-export interface ReadOperations {
+export interface ReadOperations extends ToolPathOperations {
 	/** Read file contents as a Buffer */
 	readFile: (absolutePath: string) => Promise<Buffer>;
 	/** Check if file is readable (throw if not) */
@@ -99,7 +99,7 @@ export function createReadToolDefinition(
 						try {
 							const effectiveCwd = ctx?.cwd ?? cwd;
 							const absolutePath = options?.operations
-								? resolveToCwd(path, effectiveCwd)
+								? resolveToolPath(path, effectiveCwd, ops)
 								: await resolveReadPathAsync(path, effectiveCwd);
 							if (aborted) return;
 							// Check if file exists and is readable.

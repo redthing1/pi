@@ -11,6 +11,7 @@ import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { ScopedModel } from "../model-resolver.ts";
 import { DEFAULT_PRIVACY_MODE, type PrivacyMode } from "../privacy.ts";
+import type { PromptDocument } from "../prompt-templates.ts";
 import type { SessionManager } from "../session-manager.ts";
 import type { SkillDocument } from "../skills.ts";
 import type { BuildSystemPromptOptions } from "../system-prompt.ts";
@@ -1289,12 +1290,14 @@ export class ExtensionRunner {
 		skillPaths: Array<{ path: string; extensionPath: string }>;
 		skillReplacement: { documents: SkillDocument[]; extensionPath: string } | undefined;
 		promptPaths: Array<{ path: string; extensionPath: string }>;
+		promptReplacement: { documents: PromptDocument[]; extensionPath: string } | undefined;
 		themePaths: Array<{ path: string; extensionPath: string }>;
 	}> {
 		const ctx = this.createContext();
 		const skillPaths: Array<{ path: string; extensionPath: string }> = [];
 		let skillReplacement: { documents: SkillDocument[]; extensionPath: string } | undefined;
 		const promptPaths: Array<{ path: string; extensionPath: string }> = [];
+		let promptReplacement: { documents: PromptDocument[]; extensionPath: string } | undefined;
 		const themePaths: Array<{ path: string; extensionPath: string }> = [];
 
 		for (const ext of this.extensions) {
@@ -1324,6 +1327,17 @@ export class ExtensionRunner {
 					if (result?.promptPaths?.length) {
 						promptPaths.push(...result.promptPaths.map((path) => ({ path, extensionPath: ext.path })));
 					}
+					if (result?.replacePrompts !== undefined) {
+						if (promptReplacement) {
+							this.emitError({
+								extensionPath: ext.path,
+								event: "resources_discover",
+								error: `Prompts were already replaced by ${promptReplacement.extensionPath}`,
+							});
+						} else {
+							promptReplacement = { documents: result.replacePrompts, extensionPath: ext.path };
+						}
+					}
 					if (result?.themePaths?.length) {
 						themePaths.push(...result.themePaths.map((path) => ({ path, extensionPath: ext.path })));
 					}
@@ -1340,7 +1354,7 @@ export class ExtensionRunner {
 			}
 		}
 
-		return { skillPaths, skillReplacement, promptPaths, themePaths };
+		return { skillPaths, skillReplacement, promptPaths, promptReplacement, themePaths };
 	}
 
 	/** Emit input event. Transforms chain, "handled" short-circuits. */

@@ -19,8 +19,8 @@ import {
 import type { Extension, ExtensionRuntime, InlineExtension, LoadExtensionsResult } from "./extensions/types.ts";
 import { findGitPaths } from "./footer-data-provider.ts";
 import { DefaultPackageManager, type PathMetadata, type ResolvedResource } from "./package-manager.ts";
-import type { PromptTemplate } from "./prompt-templates.ts";
-import { loadPromptTemplates } from "./prompt-templates.ts";
+import type { PromptDocument, PromptTemplate } from "./prompt-templates.ts";
+import { loadPromptDocuments, loadPromptTemplates } from "./prompt-templates.ts";
 import { SettingsManager } from "./settings-manager.ts";
 import type { Skill, SkillDocument } from "./skills.ts";
 import { loadSkillDocuments, loadSkills } from "./skills.ts";
@@ -31,6 +31,7 @@ export interface ResourceExtensionPaths {
 	skillPaths?: Array<{ path: string; metadata: PathMetadata }>;
 	skillReplacement?: { documents: SkillDocument[]; source: string };
 	promptPaths?: Array<{ path: string; metadata: PathMetadata }>;
+	promptReplacement?: { documents: PromptDocument[]; source: string };
 	themePaths?: Array<{ path: string; metadata: PathMetadata }>;
 }
 
@@ -365,7 +366,13 @@ export class DefaultResourceLoader implements ResourceLoader {
 			this.updateSkillsFromPaths(this.lastSkillPaths, this.resourceMetadataByPath);
 		}
 
-		if (promptPaths.length > 0) {
+		if (paths.promptReplacement) {
+			const result = this.dedupePrompts(
+				loadPromptDocuments(paths.promptReplacement.documents, paths.promptReplacement.source),
+			);
+			this.prompts = result.prompts;
+			this.promptDiagnostics = result.diagnostics;
+		} else if (promptPaths.length > 0) {
 			this.lastPromptPaths = this.mergePaths(
 				this.lastPromptPaths,
 				promptPaths.map((entry) => entry.path),

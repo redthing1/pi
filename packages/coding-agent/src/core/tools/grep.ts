@@ -6,7 +6,7 @@ import path from "path";
 import { type Static, Type } from "typebox";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
-import { resolveToCwd } from "./path-utils.ts";
+import { resolveToolPath, type ToolPathOperations } from "./path-utils.ts";
 import { grepRenderers } from "./renderers/grep.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import {
@@ -50,7 +50,7 @@ export interface GrepToolDetails {
  * Pluggable operations for the grep tool.
  * Override these to delegate search to remote systems (for example SSH).
  */
-export interface GrepOperations {
+export interface GrepOperations extends ToolPathOperations {
 	/** Check if path is a directory. Throws if path does not exist. */
 	isDirectory: (absolutePath: string) => Promise<boolean> | boolean;
 	/** Read file contents for context lines */
@@ -128,8 +128,8 @@ export function createGrepToolDefinition(
 							return;
 						}
 
-						const searchPath = resolveToCwd(searchDir || ".", ctx?.cwd ?? cwd);
 						const ops = customOps ?? defaultGrepOperations;
+						const searchPath = resolveToolPath(searchDir || ".", ctx?.cwd ?? cwd, ops);
 						let isDirectory: boolean;
 						try {
 							isDirectory = await ops.isDirectory(searchPath);

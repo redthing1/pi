@@ -56,6 +56,7 @@ import type { CustomMessage } from "../messages.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { ScopedModel } from "../model-resolver.ts";
 import type { PrivacyMode } from "../privacy.ts";
+import type { PromptDocument } from "../prompt-templates.ts";
 import type {
 	BranchSummaryEntry,
 	CompactionEntry,
@@ -573,6 +574,8 @@ export interface ResourcesDiscoverResult {
 	/** Authoritative skill set for this discovery cycle. An empty array clears local skills. */
 	replaceSkills?: SkillDocument[];
 	promptPaths?: string[];
+	/** Authoritative prompt-template set for this discovery cycle. An empty array clears local prompts. */
+	replacePrompts?: PromptDocument[];
 	themePaths?: string[];
 }
 

@@ -5,7 +5,7 @@ import path from "path";
 import { type Static, Type } from "typebox";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
-import { pathExists, resolveToCwd } from "./path-utils.ts";
+import { pathExists, resolveToolPath, type ToolPathOperations } from "./path-utils.ts";
 import { findRenderers } from "./renderers/find.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
@@ -49,7 +49,7 @@ export interface FindToolDetails {
  * Pluggable operations for the find tool.
  * Override these to delegate file search to remote systems (for example SSH).
  */
-export interface FindOperations {
+export interface FindOperations extends ToolPathOperations {
 	/** Check if path exists */
 	exists: (absolutePath: string) => Promise<boolean> | boolean;
 	/** Find files matching glob pattern. Returns relative or absolute paths. */
@@ -108,9 +108,9 @@ export function createFindToolDefinition(
 
 				(async () => {
 					try {
-						const searchPath = resolveToCwd(searchDir || ".", ctx?.cwd ?? cwd);
-						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 						const ops = customOps ?? defaultFindOperations;
+						const searchPath = resolveToolPath(searchDir || ".", ctx?.cwd ?? cwd, ops);
+						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 
 						// If custom operations provide glob(), use that instead of fd.
 						if (customOps?.glob) {

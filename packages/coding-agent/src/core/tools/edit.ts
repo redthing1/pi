@@ -14,7 +14,7 @@ import {
 	restoreLineEndings,
 } from "./edit-diff.ts";
 import { withFileMutationQueue } from "./file-mutation-queue.ts";
-import { resolveToCwd } from "./path-utils.ts";
+import { resolveToolPath, type ToolPathOperations } from "./path-utils.ts";
 import { type EditRenderState, editRenderers } from "./renderers/edit.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 
@@ -80,7 +80,7 @@ export interface EditToolDetails {
  * Pluggable operations for the edit tool.
  * Override these to delegate file editing to remote systems (for example SSH).
  */
-export interface EditOperations {
+export interface EditOperations extends ToolPathOperations {
 	/** Read file contents as a Buffer */
 	readFile: (absolutePath: string) => Promise<Buffer>;
 	/** Write content to a file */
@@ -161,7 +161,7 @@ export function createEditToolDefinition(
 		prepareArguments: prepareEditArguments,
 		async execute(_toolCallId, input: EditToolInput, signal?: AbortSignal, _onUpdate?, ctx?: ExtensionContext) {
 			const { path, edits } = validateEditInput(input);
-			const absolutePath = resolveToCwd(path, ctx?.cwd ?? cwd);
+			const absolutePath = resolveToolPath(path, ctx?.cwd ?? cwd, ops);
 
 			return mutationQueue(absolutePath, async () => {
 				// Do not reject from an abort event listener here: that would release the

@@ -3,7 +3,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import nodePath from "path";
 import { type Static, Type } from "typebox";
 import type { ExtensionContext, ToolDefinition } from "../extensions/types.ts";
-import { pathExists, resolveToCwd } from "./path-utils.ts";
+import { pathExists, resolveToolPath, type ToolPathOperations } from "./path-utils.ts";
 import { lsRenderers } from "./renderers/ls.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
 import { DEFAULT_MAX_BYTES, formatSize, type TruncationResult, truncateHead } from "./truncate.ts";
@@ -31,7 +31,7 @@ export interface LsToolDetails {
  * Pluggable operations for the ls tool.
  * Override these to delegate directory listing to remote systems (for example SSH).
  */
-export interface LsOperations {
+export interface LsOperations extends ToolPathOperations {
 	/** Check if path exists */
 	exists: (absolutePath: string) => Promise<boolean> | boolean;
 	/** Get file or directory stats. Throws if not found. */
@@ -80,7 +80,7 @@ export function createLsToolDefinition(
 
 				(async () => {
 					try {
-						const dirPath = resolveToCwd(path || ".", ctx?.cwd ?? cwd);
+						const dirPath = resolveToolPath(path || ".", ctx?.cwd ?? cwd, ops);
 						const effectiveLimit = limit ?? DEFAULT_LIMIT;
 
 						// Check if path exists.

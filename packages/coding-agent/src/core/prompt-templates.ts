@@ -17,6 +17,12 @@ export interface PromptTemplate {
 	filePath: string; // Absolute path to the template file
 }
 
+export interface PromptDocument {
+	path: string;
+	content: string;
+	scope: "user" | "project";
+}
+
 /**
  * Parse command arguments respecting quoted strings (bash-style)
  * Returns array of arguments
@@ -101,9 +107,8 @@ export function substituteArgs(content: string, args: string[]): string {
 	);
 }
 
-function loadTemplateFromFile(filePath: string, sourceInfo: SourceInfo): PromptTemplate | null {
+function loadTemplateFromContent(filePath: string, rawContent: string, sourceInfo: SourceInfo): PromptTemplate | null {
 	try {
-		const rawContent = readFileSync(filePath, "utf-8");
 		const { frontmatter, body } = parseFrontmatter<Record<string, string>>(rawContent);
 
 		const name = basename(filePath).replace(/\.md$/, "");
@@ -130,6 +135,32 @@ function loadTemplateFromFile(filePath: string, sourceInfo: SourceInfo): PromptT
 	} catch {
 		return null;
 	}
+}
+
+function loadTemplateFromFile(filePath: string, sourceInfo: SourceInfo): PromptTemplate | null {
+	try {
+		return loadTemplateFromContent(filePath, readFileSync(filePath, "utf-8"), sourceInfo);
+	} catch {
+		return null;
+	}
+}
+
+/** Parse extension-provided prompt documents using ordinary Pi semantics. */
+export function loadPromptDocuments(documents: PromptDocument[], source: string): PromptTemplate[] {
+	const templates: PromptTemplate[] = [];
+	for (const document of documents) {
+		const template = loadTemplateFromContent(
+			document.path,
+			document.content,
+			createSyntheticSourceInfo(document.path, {
+				source,
+				scope: document.scope,
+				baseDir: dirname(document.path),
+			}),
+		);
+		if (template) templates.push(template);
+	}
+	return templates;
 }
 
 /**
