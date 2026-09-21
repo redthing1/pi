@@ -2725,16 +2725,6 @@ export class AgentSession {
 				| CompactionEntry
 				| undefined;
 
-			if (this._extensionRunner && savedCompactionEntry) {
-				await this._extensionRunner.emit({
-					type: "session_compact",
-					compactionEntry: savedCompactionEntry,
-					fromExtension,
-					reason: "manual",
-					willRetry: false,
-				});
-			}
-
 			const compactionResult: CompactionResult = {
 				summary,
 				firstKeptEntryId,
@@ -2754,6 +2744,15 @@ export class AgentSession {
 				aborted: false,
 				willRetry: false,
 			});
+			if (savedCompactionEntry) {
+				await this._extensionRunner.emit({
+					type: "session_compact",
+					compactionEntry: savedCompactionEntry,
+					fromExtension,
+					reason: "manual",
+					willRetry: false,
+				});
+			}
 			return compactionResult;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);

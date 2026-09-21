@@ -251,7 +251,9 @@ describe("AgentSession compaction characterization", () => {
 		);
 	});
 
-	it("allows a queued prompt to start when manual compaction ends", async () => {
+	it.each(["core", "extension"])("allows a queued prompt from %s when manual compaction ends", async (source) => {
+		let queuedPrompt: Promise<void> | undefined;
+		let idleAtNotification: boolean | undefined;
 		const harness = await createHarness({
 			settings: { compaction: { keepRecentTokens: 1 } },
 			extensionFactories: [
@@ -264,6 +266,11 @@ describe("AgentSession compaction characterization", () => {
 							details: {},
 						},
 					}));
+					pi.on("session_compact", (_event, ctx) => {
+						if (source !== "extension") return;
+						idleAtNotification = ctx.isIdle();
+						queuedPrompt = harness.session.prompt("queued after compaction");
+					});
 				},
 			],
 		});
@@ -271,16 +278,16 @@ describe("AgentSession compaction characterization", () => {
 		seedCompactableSession(harness);
 		harness.setResponses([fauxAssistantMessage("queued response")]);
 
-		let queuedPrompt: Promise<void> | undefined;
 		harness.session.subscribe((event) => {
-			if (event.type === "compaction_end" && event.reason === "manual" && event.result) {
-				expect(harness.session.isCompacting).toBe(false);
+			if (source === "core" && event.type === "compaction_end" && event.reason === "manual" && event.result) {
+				idleAtNotification = harness.session.isIdle;
 				queuedPrompt = harness.session.prompt("queued after compaction");
 			}
 		});
 
 		await harness.session.compact();
-		if (!queuedPrompt) throw new Error("compaction_end did not start the queued prompt");
+		expect(idleAtNotification).toBe(true);
+		if (!queuedPrompt) throw new Error("compaction notification did not start the queued prompt");
 		await queuedPrompt;
 
 		expect(getUserTexts(harness)).toContain("queued after compaction");
