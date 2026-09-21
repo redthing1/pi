@@ -1,6 +1,8 @@
+import { getCurrentSystemMessage } from "@earendil-works/pi-ai";
 import { chmodSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { SessionManager } from "../../src/core/session-manager.ts";
 import { assistantMsg, userMsg } from "../utilities.ts";
@@ -14,6 +16,43 @@ afterEach(() => {
 });
 
 describe("SessionManager compaction candidates", () => {
+	it.each(["before-retained", "after-retained"] as const)(
+		"preserves effective system state ahead of %s content",
+		(placement) => {
+			const session = SessionManager.inMemory();
+			session.appendMessage({
+				role: "system",
+				content: "base",
+				sections: { cwd: "old" },
+				toolsAdded: [{ name: "old", description: "old", parameters: Type.Object({}) }],
+				timestamp: 1,
+			});
+			const anchor = session.appendMessage(userMsg("keep"));
+			session.appendMessage({
+				role: "system",
+				content: "extra",
+				sections: { cwd: "remote" },
+				toolsRemoved: [{ name: "old" }],
+				toolsAdded: [{ name: "read", description: "remote read", parameters: Type.Object({}) }],
+				timestamp: 2,
+			});
+			session.appendMessage(assistantMsg("latest"));
+			const effective = getCurrentSystemMessage(session.buildSessionContext().messages);
+			const candidate = session.createCompactionCandidate("summary", anchor, 123, undefined, true, undefined, {
+				placement,
+			});
+			expect(candidate.context.messages[0]).toEqual({ ...effective, timestamp: expect.any(Number) });
+			expect(candidate.context.messages.filter((message) => message.role === "system")).toHaveLength(1);
+			expect(candidate.context.messages.map((message) => message.role)).toEqual(
+				placement === "after-retained"
+					? ["system", "user", "assistant", "compactionSummary"]
+					: ["system", "compactionSummary", "user", "assistant"],
+			);
+			session.commitCompactionCandidate(candidate);
+			expect(session.buildSessionContext()).toEqual(candidate.context);
+		},
+	);
+
 	it("previews the exact immutable entry without mutating the session", () => {
 		const session = SessionManager.inMemory();
 		const firstKeptEntryId = session.appendMessage(userMsg("keep"));

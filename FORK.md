@@ -5,6 +5,7 @@ This private fork stays close to upstream while enforcing reproducible source bu
 ## Upstream discipline
 
 - Merge upstream frequently. Keep fork changes small, isolated, and easy to review.
+- `AGENTS.md` is fork-owned. Preserve our concise instructions during merges; adopt upstream instruction changes only when they provide a concrete benefit for this fork.
 - Treat deliberate fork behavior as a requirement, not as disposable patch content. Preserve it unless upstream now provides an equivalent outcome or the user explicitly agrees to change or remove it.
 - Preserve outcomes rather than old implementations. When upstream refactors an affected system, understand the fork feature and adapt it cleanly to the new architecture with the smallest practical delta.
 - Textual conflicts are not the only risk: cleanly merged upstream changes can also alter fork behavior. Identify affected features before finalizing an integration, and discuss ambiguous tradeoffs with the user.

@@ -9,7 +9,7 @@ import type { SettingsManager } from "../core/settings-manager.ts";
 import { type SessionSelection, SessionSelectorComponent } from "../modes/interactive/components/session-selector.ts";
 import { createStartupTui, startStartupTui } from "./startup-ui.ts";
 
-type SessionsLoader = (onProgress?: SessionListProgress) => Promise<SessionInfo[]>;
+type SessionsLoader = (onProgress?: SessionListProgress, signal?: AbortSignal) => Promise<SessionInfo[]>;
 
 /** Show TUI session selector and return the selected session or null if cancelled */
 export async function selectSession(

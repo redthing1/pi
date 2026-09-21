@@ -5,7 +5,6 @@ import {
 	type AuthContext,
 	type AuthInteraction,
 	type AuthResult,
-	type Context,
 	type Credential,
 	lazyStream,
 	type Model,
@@ -18,6 +17,7 @@ import {
 	type RefreshModelsContext,
 	type SimpleStreamOptions,
 	type StreamOptions,
+	type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { getApiProvider } from "@earendil-works/pi-ai/compat";
 import type { ModelConfig, ModelsJsonModel, ModelsJsonModelOverride, ModelsJsonProvider } from "./model-config.ts";
@@ -49,7 +49,11 @@ export interface ProviderConfigInput {
 	apiKey?: string;
 	api?: Api;
 	zdr?: boolean;
-	streamSimple?: (model: Model<Api>, context: Context, options?: SimpleStreamOptions) => AssistantMessageEventStream;
+	streamSimple?: (
+		model: Model<Api>,
+		context: TranscriptContext,
+		options?: SimpleStreamOptions,
+	) => AssistantMessageEventStream;
 	headers?: Record<string, string>;
 	authHeader?: boolean;
 	oauth?: ExtensionOAuthConfig;
@@ -64,6 +68,7 @@ export interface ProviderConfigInput {
 		thinkingLevelMap?: Model<Api>["thinkingLevelMap"];
 		input: ("text" | "image")[];
 		cost: Model<Api>["cost"];
+		promptCache?: Model<Api>["promptCache"];
 		contextWindow: number;
 		maxTokens: number;
 		samplingParams?: Record<string, unknown>;
@@ -122,6 +127,7 @@ function applyModelOverride(model: Model<Api>, override: ModelsJsonModelOverride
 					tiers: override.cost.tiers ?? model.cost.tiers,
 				}
 			: model.cost,
+		promptCache: override.promptCache ? { ...model.promptCache, ...override.promptCache } : model.promptCache,
 		contextWindow: override.contextWindow ?? model.contextWindow,
 		maxTokens: override.maxTokens ?? model.maxTokens,
 		samplingParams: override.samplingParams
@@ -162,6 +168,7 @@ function modelFromJson(
 		thinkingLevelMap: definition.thinkingLevelMap,
 		input: (definition.input ?? ["text"]) as ("text" | "image")[],
 		cost: definition.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		promptCache: definition.promptCache,
 		contextWindow: definition.contextWindow ?? 128000,
 		maxTokens: definition.maxTokens ?? 16384,
 		samplingParams: definition.samplingParams,
@@ -476,7 +483,7 @@ export function composeModelProvider(
 	const supportsBaseApi = (model: Model<Api>) => base?.getModels().some((entry) => entry.api === model.api) ?? false;
 	const streamWith = (
 		model: Model<Api>,
-		context: Context,
+		context: TranscriptContext,
 		options: StreamOptions | undefined,
 		simple: boolean,
 	): AssistantMessageEventStream =>

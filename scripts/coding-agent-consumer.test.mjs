@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -8,7 +9,7 @@ import { installCodingAgentConsumer, packReleasePackages, smokeTestCodingAgentCo
 const codingAgentName = "@earendil-works/pi-coding-agent";
 const devPackages = ["pi-client", "pi-protocol", "pi-server"].map((name) => `@earendil-works/${name}`);
 
-function createFixture(t, { importServer = false, declareServer = false } = {}) {
+function createFixture(t, { importServer = false, declareServer = false, externalGraph = false } = {}) {
 	const root = mkdtempSync(join(tmpdir(), "pi-consumer-test-"));
 	t.after(() => rmSync(root, { recursive: true, force: true }));
 	const packages = [codingAgentName, "@earendil-works/chord", ...devPackages].map((name) => ({
@@ -54,6 +55,20 @@ export class ModelRuntime { static create() {} }
 			mkdirSync(dirname(join(pkg.directory, path)), { recursive: true });
 			writeFileSync(join(pkg.directory, path), content);
 		}
+		if (externalGraph && (isAgent || pkg.name === "@earendil-works/chord")) {
+			const version = isAgent ? "1.0.0" : "2.0.0";
+			manifest.dependencies = { ...manifest.dependencies, "fixture-dep": version };
+			writeFileSync(join(pkg.directory, "package.json"), JSON.stringify(manifest));
+			const dependency = join(pkg.directory, "node_modules/fixture-dep");
+			mkdirSync(dependency, { recursive: true });
+			writeFileSync(join(dependency, "package.json"), JSON.stringify({
+				name: "fixture-dep", version, main: "index.cjs",
+				dependencies: { "fixture-dep": version },
+				optionalDependencies: { "fixture-absent-platform": "1.0.0" },
+				scripts: { install: "exit 91" },
+			}));
+			writeFileSync(join(dependency, "index.cjs"), `module.exports = ${JSON.stringify(version)};`);
+		}
 	}
 	const tarballs = packReleasePackages(packages, join(root, "tarballs"));
 	const directory = join(root, "consumer");
@@ -62,12 +77,11 @@ export class ModelRuntime { static create() {} }
 }
 
 // #9132: installing every tarball directly hid undeclared runtime imports.
-test("installs only coding-agent directly and uses overrides only for declared runtime dependencies", (t) => {
+test("stages coding-agent and only its declared runtime dependencies", (t) => {
 	const directory = createFixture(t);
 	const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
 	assert.deepEqual(Object.keys(manifest.dependencies), [codingAgentName]);
 	for (const name of devPackages) {
-		assert.ok(manifest.overrides[name]);
 		assert.equal(existsSync(join(directory, "node_modules", name)), false);
 	}
 	smokeTestCodingAgentConsumer(directory);
@@ -92,4 +106,17 @@ test("fails when the SDK imports an undeclared server despite a working CLI", (t
 test("fails if a development-only dependency is added back to the published dependency tree", (t) => {
 	const directory = createFixture(t, { declareServer: true });
 	assert.throws(() => smokeTestCodingAgentConsumer(directory), /pi-server must not be installed/);
+});
+
+test("stages exact installed instances and cycles without scripts or source-tree links", (t) => {
+	const directory = createFixture(t, { externalGraph: true });
+	rmSync(join(dirname(directory), "packages"), { recursive: true });
+	for (const [name, version] of [[codingAgentName, "1.0.0"], ["@earendil-works/chord", "2.0.0"]]) {
+		const packageDirectory = join(directory, "node_modules", name);
+		assert.equal(createRequire(join(packageDirectory, "package.json"))("fixture-dep"), version);
+		const dependency = join(packageDirectory, "node_modules/fixture-dep");
+		assert.equal(realpathSync(join(dependency, "node_modules/fixture-dep")), realpathSync(dependency));
+		assert.equal(existsSync(join(dependency, "node_modules/fixture-absent-platform")), false);
+	}
+	smokeTestCodingAgentConsumer(directory);
 });

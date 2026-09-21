@@ -1,129 +1,30 @@
-# Development Rules
+# Working on this fork
 
-## Privacy
+Read [FORK.md](FORK.md) before upstream integration or changes to dependencies, builds, installation, package loading, or privacy. These instructions are fork-owned; adopt upstream instruction changes only for a concrete reason.
 
-- Respect privacy. Treat `~/.pi/agent/sessions` as sensitive; do not read, quote, or reference it without explicit permission.
+## Working practices
 
-## Fork Policy
+- Keep changes small and clear. Preserve intentional fork behavior, prefer upstream's architecture, and discuss substantive semantic conflicts before resolving them. Do not add compatibility layers unless requested.
+- Inspect the affected code and its callers in proportion to the task; full-file reads are not mandatory. Use installed dependency types rather than guessing APIs.
+- Preserve other people's work. No commits, pushes, branch changes, destructive Git operations, or broad staging without explicit authorization. Stage only reviewed, explicit paths.
+- Do not inspect private session directories or broadly search personal directories. Use isolated fixtures for testing; never use private history as test data.
+- Keep tracked files portable and free of personal paths, hostnames, credentials, and local test artifacts.
+- Communicate concisely. Explain substantive tradeoffs and distinguish verified results from assumptions. Keep the relevant living notes current without duplicating them into code documentation.
 
-Read and follow [FORK.md](FORK.md) before changing dependencies, builds, installation, updates, package loading, or upstream integration. It is the authoritative fork-specific policy.
+## Code
 
-## Conversational Style
+- Prefer direct code, precise types, and existing abstractions. Avoid unnecessary helpers, options, dependencies, and documentation.
+- Use erasable TypeScript syntax in root-checked code: no enums, namespaces, parameter properties, or other constructs requiring emission. Prefer top-level imports; retain local lazy imports where they serve a clear purpose.
+- Keep keybindings configurable through the existing defaults, not hardcoded key checks.
+- Update model catalogs through `packages/ai/scripts/generate-models.ts`, never by editing `models.generated.ts` directly.
+- Put changelog additions under the affected package's existing `[Unreleased]` subsections; preserve released history.
 
-- Keep answers short and concise
-- No emojis in commits, issues, PR comments, or code
-- No fluff or cheerful filler text (e.g., "Thanks @user" not "Thanks so much @user!")
-- Technical prose only, be direct
-- Use concise, clear, simple language. Define unavoidable jargon before using it.
-- Explain non-trivial designs and problems as: problem, concrete example or short trace, then solution. State why the solution is necessary and distinguish it from optional complexity.
-- Prefer concrete behavior and small illustrations over abstract summaries, dense terminology, or unexplained lists of changes.
-- When the user asks a question, answer it first before making edits or running implementation commands.
-- When responding to user feedback or an analysis, explicitly say whether you agree or disagree before saying what you changed.
+## Verification and dependencies
 
-## Code Quality
-
-- Read files in full before wide-ranging changes, before editing files you have not fully inspected, and when asked to investigate or audit. Do not rely on search snippets for broad changes.
-- No `any` unless absolutely necessary.
-- Inline single-line helpers that have only one call site.
-- Check node_modules for external API types; don't guess.
-- **No inline imports** (`await import()`, `import("pkg").Type`, dynamic type imports). Top-level imports only.
-- Never remove or downgrade code to fix type errors from outdated deps; upgrade the dep instead.
-- Use only erasable TypeScript syntax (Node strip-only mode) in code checked by the root config (`packages/*/src`, `packages/*/test`, `packages/coding-agent/examples`): no parameter properties, `enum`, `namespace`/`module`, `import =`, `export =`, or other constructs needing JS emit. Use explicit fields with constructor assignments.
-- Always ask before removing functionality or code that appears intentional.
-- Do not preserve backward compatibility unless the user asks for it.
-- Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add defaults to `DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS` so they stay configurable.
-- Never modify `packages/ai/src/models.generated.ts` directly; update `packages/ai/scripts/generate-models.ts` instead, then regenerate. Including the resulting `models.generated.ts` diff is always OK, even if regeneration includes unrelated upstream model metadata changes.
-
-## Commands
-
-- After code changes (not documentation changes): `bun run check` (get full output, no tail). Fix all errors, warnings, and infos before committing.
-- Note: `bun run check` does not run tests.
-- NEVER run: `bun run dev`, `bun run build`, `bun test`
-- Only run specific tests if user instructs: `bun ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts`
-- Run tests from the package root, not the repo root.
-- If you create or modify a test file, you MUST run that test file and iterate until it passes.
-- When writing tests, run them, identify issues in either the test or implementation, and iterate until fixed.
-- For `packages/coding-agent/test/suite/`, use `test/suite/harness.ts` plus the faux provider. Do not use real provider APIs, real API keys, or paid tokens.
-- NEVER commit unless user asks.
-- For ad-hoc scripts, write them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
-
-## Dependency and Install Security
-
-- Follow [FORK.md](FORK.md); do not weaken its supply-chain boundary.
-- Hydrate existing dependencies with `bun install --frozen-lockfile --ignore-scripts`.
-- After an intentional manifest change, refresh `bun.lock` with `bun install --lockfile-only --ignore-scripts` and review the full diff.
-
-## Git
-
-Multiple pi sessions may be running in this cwd at the same time, each modifying different files. Git operations that touch unstaged, staged, or untracked files outside your own changes will stomp on other sessions' work. Follow these rules:
-
-Committing:
-
-- Only commit files YOU changed in THIS session.
-- Stage explicit paths (`git add <path1> <path2>`); never `git add -A` / `git add .`.
-- Before committing, run `git status` and verify you are only staging your files.
-- `packages/ai/src/models.generated.ts` may always be included alongside your files.
-- Message format: `{feat,fix,docs}[(ai,tui,agent,coding-agent)]: <commit message> (optionally multiple lines)`. Message is informative and concise.
-
-Never run (destroys other agents' work or bypasses checks):
-
-- `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash`, `git add -A`, `git add .`, `git commit --no-verify`.
-
-If rebase conflicts occur:
-
-- Resolve conflicts only in files you modified.
-- If a conflict is in a file you did not modify, abort and ask the user.
-- Never force push.
-
-## Issues and PRs
-
-See `CONTRIBUTING.md` for the contributor quality bar.
-
-When reviewing PRs:
-
-- Do not run `gh pr checkout`, `git switch`, or otherwise move the worktree to the PR branch unless the user explicitly asks.
-- Use `gh pr view`, `gh pr diff`, `gh api`, and local `git show`/`git diff` against fetched refs to inspect PR metadata, commits, and patches without changing branches.
-- If you need PR file contents, fetch/read them into temporary files or use `git show <ref>:<path>` without switching branches.
-
-When creating issues:
-
-- Add `pkg:*` labels for affected packages (`pkg:agent`, `pkg:ai`, `pkg:coding-agent`, `pkg:tui`); use all that apply.
-
-When posting issue/PR comments:
-
-- Write the comment to a temp file and post with `gh issue/pr comment --body-file` (never multi-line markdown via `--body`).
-- Keep comments concise, technical, in the user's tone.
-- End every AI-posted comment with the AI-generated disclaimer line specified by the originating prompt (e.g. `This comment is AI-generated by `/wr``).
-
-When closing issues via commit:
-
-- Include `fixes #<number>` or `closes #<number>` in the message so merging auto-closes the issue. For multiple issues, repeat the keyword per issue (`closes #1, closes #2`); a shared keyword (`closes #1, #2`) only closes the first.
-
-## Testing pi Interactive Mode with tmux
-
-For testing pi's interactive mode, load and follow [.pi/skills/interactive-testing.md](.pi/skills/interactive-testing.md).
-
-## Changelog
-
-Location: `packages/*/CHANGELOG.md` (one per package).
-
-Sections under `## [Unreleased]`: `### Breaking Changes` (API changes requiring migration), `### Added`, `### Changed`, `### Fixed`, `### Removed`.
-
-Rules:
-
-- All new entries go under `## [Unreleased]`. Read the full section first and append to existing subsections; never duplicate them.
-- Released version sections (e.g. `## [0.12.2]`) are immutable; never modify them.
-- Do not create changelog entries when working on a branch other than `main` or pull request
-
-Attribution:
-
-- Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/pi/issues/123))`
-- External contributions: `Added feature X ([#456](https://github.com/earendil-works/pi/pull/456) by [@username](https://github.com/username))`
-
-## Releasing
-
-For release preparation, publishing, verification, or recovery, load and follow [.pi/skills/release.md](.pi/skills/release.md).
-
-## User Override
-
-If the user's instructions conflict with any rule in this document, ask for explicit confirmation before overriding. Only then execute their instructions.
+- After code changes, run `bun run check`, inspect the full output, and address failures. This does not run tests.
+- Run focused tests from the package root: `bun ../../node_modules/vitest/dist/cli.js --run test/<file>.test.ts`. Always run tests you change. Prefer useful behavior contracts over issue-specific test scaffolding.
+- Coding-agent suite tests use `test/suite/harness.ts` and the faux provider, never real credentials or paid calls.
+- For interactive checks, follow [.pi/skills/interactive-testing.md](.pi/skills/interactive-testing.md), use isolated state and tmux, and clean up task-owned processes and artifacts.
+- Do not run `bun run dev`, `bun run build`, or `bun test` without explicit approval. The supported installation path is `bun run install:local-pi`; do not replace the user's installed CLI without permission.
+- Hydrate dependencies with `bun install --frozen-lockfile --ignore-scripts`. After intentional manifest changes, use `bun install --lockfile-only --ignore-scripts` and review the complete lock diff. Follow `FORK.md`; never use ad hoc package runners or lifecycle scripts.
+- For release work, follow [.pi/skills/release.md](.pi/skills/release.md).

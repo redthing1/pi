@@ -205,6 +205,7 @@ describe("AgentSessionRuntime characterization", () => {
 			.getEntries()
 			.filter((entry) => entry.type === "message");
 		expect(outgoingEntries.map((entry) => entry.message.role)).toEqual([
+			"system",
 			"user",
 			"assistant",
 			"toolResult",
@@ -254,8 +255,13 @@ describe("AgentSessionRuntime characterization", () => {
 		await runtime.session.bindExtensions({});
 
 		expect(forkResult).toEqual({ cancelled: false, selectedText: "first prompt" });
-		expect(runtime.session.messages).toEqual([]);
-		expect(runtime.session.sessionManager.getEntries().filter((entry) => entry.type === "message")).toEqual([]);
+		expect(runtime.session.messages.map((message) => message.role)).toEqual(["system"]);
+		expect(
+			runtime.session.sessionManager
+				.getEntries()
+				.filter((entry) => entry.type === "message")
+				.map((entry) => entry.message.role),
+		).toEqual(["system"]);
 
 		let capturedRoles: string[] = [];
 		faux.setResponses([
@@ -266,7 +272,7 @@ describe("AgentSessionRuntime characterization", () => {
 		]);
 		await runtime.session.prompt("next prompt");
 
-		expect(capturedRoles).toEqual(["user"]);
+		expect(capturedRoles).toEqual(["system", "user"]);
 	});
 
 	it("preserves an existing session when importing a file with the same name", async () => {

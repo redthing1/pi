@@ -7,7 +7,12 @@ if (!existsSync(cliPath)) {
 	throw new Error(`Local Pi CLI has not been built: ${cliPath}`);
 }
 
-const globalBinDir = execFileSync(process.execPath, ["pm", "bin", "--global"], { encoding: "utf8" }).trim();
+// Query Bun's configured bin directory using this checkout's manifest, without
+// requiring or creating a global package installation.
+const globalBinDir = execFileSync(process.execPath, ["pm", "bin", "--global"], {
+	encoding: "utf8",
+	env: { ...process.env, BUN_INSTALL_GLOBAL_DIR: process.cwd() },
+}).trim();
 if (!globalBinDir) {
 	throw new Error("Bun did not report a global binary directory");
 }

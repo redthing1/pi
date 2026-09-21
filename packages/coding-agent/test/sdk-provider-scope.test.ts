@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import { type Api, type Model, normalizeContext } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
@@ -122,7 +122,7 @@ describe("createAgentSession provider scope", () => {
 		});
 
 		try {
-			await expect(session.agent.streamFunction(riskyModel, { messages: [] }, {})).rejects.toThrow(
+			await expect(session.agent.streamFunction(riskyModel, normalizeContext({ messages: [] }), {})).rejects.toThrow(
 				'Model risky-provider/risky-model is outside provider scope "safe-provider"',
 			);
 		} finally {

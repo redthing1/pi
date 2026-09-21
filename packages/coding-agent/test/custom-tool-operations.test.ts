@@ -14,7 +14,7 @@ import {
 describe("custom tool operation isolation", () => {
 	it("exports the structured system prompt builder", () => {
 		const prompt = buildSystemPrompt({ cwd: "/remote/work", contextFiles: [] });
-		expect(prompt).toContain("Current working directory: /remote/work");
+		expect(prompt).toContain("<cwd>\n/remote/work\n</cwd>");
 	});
 
 	it("does not apply local read-path variants before custom operations", async () => {

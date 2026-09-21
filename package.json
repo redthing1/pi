@@ -13,9 +13,9 @@
 	],
 	"scripts": {
 		"clean": "bun run --workspaces --if-present clean",
-		"build": "cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build && cd ../agent && bun run build && cd ../session-backends/sqlite-node && bun run build && cd ../../protocol && bun run build && cd ../client && bun run build && cd ../server && bun run build && cd ../coding-agent && bun run build",
+		"build": "cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build && cd ../durable && bun run build && cd ../agent && bun run build && cd ../session-backends/sqlite-node && bun run build && cd ../../protocol && bun run build && cd ../client && bun run build && cd ../server && bun run build && cd ../coding-agent && bun run build",
 		"build:pi": "cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build:offline && cd ../agent && bun run build && cd ../protocol && bun run build && cd ../client && bun run build && cd ../coding-agent && bun run build",
-		"build:offline": "cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build:offline && cd ../agent && bun run build && cd ../session-backends/sqlite-node && bun run build && cd ../../protocol && bun run build && cd ../client && bun run build && cd ../server && bun run build && cd ../coding-agent && bun run build",
+		"build:offline": "cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../agent && bun run build && cd ../session-backends/sqlite-node && bun run build && cd ../../protocol && bun run build && cd ../client && bun run build && cd ../server && bun run build && cd ../coding-agent && bun run build",
 		"build:native:darwin": "bun run --cwd packages/tui build:native:darwin",
 		"build:native:linux": "bun run --cwd packages/tui build:native:linux",
 		"build:native:win32": "bun run --cwd packages/tui build:native:win32",

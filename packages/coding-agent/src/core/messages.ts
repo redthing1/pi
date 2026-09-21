@@ -217,6 +217,7 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
 						timestamp: m.timestamp,
 					};
 				}
+				case "system":
 				case "assistant":
 				case "toolResult":
 					return m;
