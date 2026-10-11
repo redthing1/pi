@@ -47,6 +47,7 @@ ZDR does not disable provider caching, routing affinity, or required protocol he
 
 ## No telemetry or vendor phone-home
 
+- Pi and its extensions must work without project-hosted services. Use direct provider and OAuth endpoints; do not depend on hosted vendor catalogs, OAuth metadata, callback relays, or package galleries.
 - Pi runtime must not send install, update, usage, analytics, crash, or diagnostic telemetry.
 - Pi runtime must not automatically contact project-controlled services for version checks, model catalogs, or similar background requests.
 - Pi must not inject project attribution, tracking identifiers, or durable local session identifiers into provider requests. Provider-required routing and cache-affinity identifiers may use a fresh runtime-only ID.

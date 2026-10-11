@@ -115,10 +115,8 @@ tar -tzf "$temporary_archive" > "$manifest"
 
 required_paths=(
     "package.json"
-    "package-lock.json"
+    "bun.lock"
     "scripts/build-binaries.sh"
-    "packages/ai/src/models.generated.ts"
-    "packages/ai/src/image-models.generated.ts"
     "packages/ai/src/providers/data/.manifest.json"
     "packages/tui/native/napi.h"
     "packages/tui/native/clipboard.h"

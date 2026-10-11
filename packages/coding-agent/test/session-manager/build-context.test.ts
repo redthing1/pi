@@ -52,7 +52,7 @@ function compaction(
 		parentId,
 		timestamp: "2025-01-01T00:00:00Z",
 		summary,
-		firstKeptEntryId,
+		firstKeptEntryId: firstKeptEntryId ?? id,
 		placement,
 		tokensBefore: 1000,
 	};
@@ -359,5 +359,43 @@ describe("buildSessionContext", () => {
 			// Should only get the orphan since parent chain is broken
 			expect(ctx.messages).toHaveLength(1);
 		});
+	});
+});
+
+describe("projected context usage", () => {
+	it("invalidates earlier usage after a prefix edit while preserving accounting", () => {
+		const entries: SessionEntry[] = [msg("u", null, "user", "original"), msg("a", "u", "assistant", "answer")];
+		entries.push({
+			type: "context_edit",
+			id: "e",
+			parentId: "a",
+			timestamp: "2025-01-02T00:00:00Z",
+			targetId: "u",
+			replacement: { content: "replacement" },
+		});
+		const projected = buildSessionContext(entries).messages;
+		expect(projected[0]).toHaveProperty("content", "replacement");
+		expect(projected[1]).toMatchObject({ usageContextValid: false, usage: { totalTokens: 2 } });
+		expect(entries[1]).not.toHaveProperty("message.usageContextValid");
+	});
+
+	it("accepts usage from a response generated after the edit", () => {
+		const entries: SessionEntry[] = [
+			msg("u", null, "user", "original"),
+			msg("a", "u", "assistant", "answer"),
+			{
+				type: "context_edit",
+				id: "e",
+				parentId: "a",
+				timestamp: "2025-01-02T00:00:00Z",
+				targetId: "u",
+				replacement: null,
+			},
+			msg("b", "e", "assistant", "new answer"),
+		];
+		const projected = buildSessionContext(entries).messages;
+		expect(projected).toHaveLength(2);
+		expect(projected[0]).toHaveProperty("usageContextValid", false);
+		expect(projected[1]).not.toHaveProperty("usageContextValid");
 	});
 });

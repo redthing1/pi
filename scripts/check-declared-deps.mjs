@@ -1,7 +1,9 @@
 import { builtinModules } from "node:module";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { extname, join, relative, sep } from "node:path";
-import ts from "typescript";
+import { extname, join, relative, resolve, sep } from "node:path";
+import { SyntaxKind } from "typescript/unstable/ast";
+import * as is from "typescript/unstable/ast/is";
+import { API } from "typescript/unstable/sync";
 
 const root = process.cwd();
 const builtins = new Set([
@@ -24,7 +26,7 @@ function walk(directory, stopAtPackages = false) {
 	if (!existsSync(directory)) return [];
 	const files = [];
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
-		if (entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
+		if (entry.name === "sessions" || entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
 		const path = join(directory, entry.name);
 		if (entry.isDirectory()) {
 			if (stopAtPackages && existsSync(join(path, "package.json"))) continue;
@@ -43,33 +45,36 @@ function dependencyName(specifier) {
 }
 
 function collectImports(file) {
-	const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+	const source = sourceProgram.getSourceFile(resolve(file));
+	if (!source) throw new Error(`Cannot parse ${file}`);
 	const imports = new Set();
 	const add = (node) => {
-		if (!node || !ts.isStringLiteralLike(node)) return;
+		if (!node || !(is.isStringLiteral(node) || is.isNoSubstitutionTemplateLiteral(node))) return;
 		const name = dependencyName(node.text);
 		if (name) imports.add(name);
 	};
 	const visit = (node) => {
-		if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) add(node.moduleSpecifier);
-		if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument)) add(node.argument.literal);
-		if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+		if (is.isImportDeclaration(node) || is.isExportDeclaration(node)) add(node.moduleSpecifier);
+		if (is.isImportTypeNode(node) && is.isLiteralTypeNode(node.argument)) add(node.argument.literal);
+		if (is.isImportEqualsDeclaration(node) && is.isExternalModuleReference(node.moduleReference)) {
 			add(node.moduleReference.expression);
 		}
-		if (ts.isCallExpression(node)) {
-			if (node.expression.kind === ts.SyntaxKind.ImportKeyword) add(node.arguments[0]);
-			if (ts.isIdentifier(node.expression) && node.expression.text === "require") add(node.arguments[0]);
+		if (is.isCallExpression(node)) {
+			if (node.expression.kind === SyntaxKind.ImportKeyword) add(node.arguments[0]);
+			if (is.isIdentifier(node.expression) && node.expression.text === "require") add(node.arguments[0]);
 			if (
-				ts.isPropertyAccessExpression(node.expression) &&
-				((ts.isIdentifier(node.expression.expression) &&
+				is.isPropertyAccessExpression(node.expression) &&
+				((is.isIdentifier(node.expression.expression) &&
 					node.expression.expression.text === "require" &&
 					node.expression.name.text === "resolve") ||
-					(node.expression.expression.kind === ts.SyntaxKind.ImportMeta && node.expression.name.text === "resolve"))
+					(is.isMetaProperty(node.expression.expression) &&
+						node.expression.expression.keywordToken === SyntaxKind.ImportKeyword &&
+						node.expression.name.text === "resolve"))
 			) {
 				add(node.arguments[0]);
 			}
 		}
-		ts.forEachChild(node, visit);
+		node.forEachChild(visit);
 	};
 	visit(source);
 	return imports;
@@ -114,16 +119,25 @@ function runtimeSourceFiles(directory, packageJson, sourceFiles) {
 	if (packageJson.private) return [];
 	const configPath = join(directory, "tsconfig.build.json");
 	if (!existsSync(configPath)) return sourceFiles;
-	const config = ts.readConfigFile(configPath, ts.sys.readFile);
-	if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
-	const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, directory);
-	if (parsed.errors.length > 0) {
-		throw new Error(parsed.errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, "\n")).join("\n"));
+	const project = snapshot.getProject(resolve(configPath));
+	const diagnostics = project.program.getConfigFileParsingDiagnostics();
+	if (diagnostics.length > 0) {
+		throw new Error(diagnostics.map((diagnostic) => diagnostic.text).join("\n"));
 	}
-	const roots = new Set(parsed.fileNames);
-	return sourceFiles.filter((file) => roots.has(file));
+	const roots = new Set(project.rootFiles.map((file) => resolve(file)));
+	return sourceFiles.filter((file) => roots.has(resolve(file)));
 }
 
+const sourceConfigPath = resolve("tsconfig.check-declared-deps.json");
+const sourceConfig = JSON.stringify({ compilerOptions: { noResolve: true, noLib: true, types: [], allowJs: true }, files: walk(root).map((file) => resolve(file)) });
+const buildConfigs = packageDirectories.map((directory) => resolve(directory, "tsconfig.build.json")).filter(existsSync);
+const api = new API({ cwd: root, fs: {
+	fileExists: (file) => resolve(file) === sourceConfigPath ? true : undefined,
+	readFile: (file) => resolve(file) === sourceConfigPath ? sourceConfig : undefined,
+} });
+const snapshot = api.updateSnapshot({ openProjects: [sourceConfigPath, ...buildConfigs] });
+const sourceProgram = snapshot.getProject(sourceConfigPath).program;
+try {
 const extensionRoot = join(root, "packages", "coding-agent", "examples", "extensions");
 for (const directory of packageDirectories) {
 	const packageJson = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
@@ -144,6 +158,9 @@ for (const directory of packageDirectories) {
 		new Set([...declaredDependencies(packageJson, true), ...hostProvided, ...rootWorkspaces]),
 		`${packageJson.name} development`,
 	);
+}
+} finally {
+	api.close();
 }
 
 if (failures.length > 0) {

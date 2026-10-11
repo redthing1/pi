@@ -106,7 +106,7 @@ function createCompactionEntry(
 		parentId: lastId,
 		timestamp: new Date().toISOString(),
 		summary,
-		firstKeptEntryId,
+		firstKeptEntryId: firstKeptEntryId ?? id,
 		placement,
 		tokensBefore: 10000,
 	};
@@ -674,6 +674,7 @@ describe.skipIf(!process.env.ANTHROPIC_OAUTH_TOKEN)("LLM summarization", () => {
 			parentId,
 			timestamp: new Date().toISOString(),
 			...compactionResult,
+			firstKeptEntryId: compactionResult.firstKeptEntryId ?? "compaction-test-id",
 		};
 		const newEntries = [...entries, compactionEntry];
 		const reloaded = buildSessionContext(newEntries);

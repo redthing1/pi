@@ -358,6 +358,7 @@ class TreeList implements Component {
 			// Entry types hidden in default view (settings/bookkeeping)
 			const isSettingsEntry =
 				entry.type === "label" ||
+				entry.type === "context_edit" ||
 				entry.type === "custom" ||
 				entry.type === "model_change" ||
 				entry.type === "thinking_level_change" ||
@@ -606,6 +607,9 @@ class TreeList implements Component {
 				break;
 			case "custom":
 				parts.push("custom", entry.customType);
+				break;
+			case "context_edit":
+				parts.push("context edit", entry.replacement === null ? "omit" : "replace", entry.targetId);
 				break;
 			case "label":
 				parts.push("label", entry.label ?? "");
@@ -862,6 +866,9 @@ class TreeList implements Component {
 				break;
 			case "custom":
 				result = theme.fg("dim", `[custom: ${entry.customType}]`);
+				break;
+			case "context_edit":
+				result = theme.fg("dim", `[context ${entry.replacement === null ? "omit" : "replace"}: ${entry.targetId}]`);
 				break;
 			case "label":
 				result = theme.fg("dim", `[label: ${entry.label ?? "(cleared)"}]`);

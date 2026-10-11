@@ -22,7 +22,7 @@ Read [FORK.md](FORK.md) before upstream integration or changes to dependencies, 
 ## Verification and dependencies
 
 - After code changes, run `bun run check`, inspect the full output, and address failures. This does not run tests.
-- Run focused tests from the package root: `bun ../../node_modules/vitest/dist/cli.js --run test/<file>.test.ts`. Always run tests you change. Prefer useful behavior contracts over issue-specific test scaffolding.
+- Run focused tests from the package root: `bun ../../node_modules/vitest/dist/cli.js --run test/<file>.test.ts`. Use `node` instead of `bun` for suites that verify native HTTP socket or dispatcher behavior. TUI tests use upstream’s Node runner: `node --test test/<file>.test.ts`. Always run tests you change. Prefer useful behavior contracts over issue-specific test scaffolding.
 - Coding-agent suite tests use `test/suite/harness.ts` and the faux provider, never real credentials or paid calls.
 - For interactive checks, follow [.pi/skills/interactive-testing.md](.pi/skills/interactive-testing.md), use isolated state and tmux, and clean up task-owned processes and artifacts.
 - Do not run `bun run dev`, `bun run build`, or `bun test` without explicit approval. The supported installation path is `bun run install:local-pi`; do not replace the user's installed CLI without permission.

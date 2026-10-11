@@ -14,7 +14,7 @@ import {
 import { Type } from "typebox";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateTokens } from "../../src/core/compaction/index.ts";
-import { SessionPersistenceError } from "../../src/core/session-manager.ts";
+import { buildSessionProjection, SessionPersistenceError } from "../../src/core/session-manager.ts";
 import { createHarness, getUserTexts, type Harness } from "./harness.ts";
 
 type SessionWithCompactionInternals = {
@@ -305,6 +305,7 @@ describe("AgentSession compaction characterization", () => {
 	it("throws when compacting without configured auth", async () => {
 		const harness = await createHarness({ withConfiguredAuth: false });
 		harnesses.push(harness);
+		// Auth is resolved only when Pi summarizes itself, after checking there is something to compact.
 		seedCompactableSession(harness);
 
 		await expect(harness.session.compact()).rejects.toThrow(`No API key found for ${harness.getModel().provider}.`);
@@ -378,7 +379,8 @@ describe("AgentSession compaction characterization", () => {
 		expect(transformContext).not.toHaveBeenCalled();
 		expect(getCurrentSystemPrompt(requestContext?.messages ?? [])).not.toBe(harness.session.agent.state.systemPrompt);
 		expect(getCurrentTools(requestContext?.messages ?? [])).toEqual([]);
-		expect(JSON.stringify(requestContext?.messages)).toContain("<conversation>");
+		// Regression test for #9652: split-turn summaries use a clear Markdown conversation boundary.
+		expect(JSON.stringify(requestContext?.messages)).toContain("# Conversation\\n[User]: message to compact");
 		expect(requestOptions).toMatchObject({ cacheRetention: "none" });
 		expect(requestOptions?.sessionId).not.toBe("active-routing-session");
 		expect(requestOptions?.transport).toBeUndefined();
@@ -814,7 +816,9 @@ describe("AgentSession compaction characterization", () => {
 		await harness.session.prompt("continue");
 
 		expect(harness.faux.state.callCount).toBe(0);
-		expect(harness.session.agent.hasQueuedMessages()).toBe(true);
+		expect(harness.session.agent.hasQueuedMessages(), JSON.stringify(harness.eventsOfType("compaction_end"))).toBe(
+			true,
+		);
 		expect(harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction")).toHaveLength(0);
 		await expect(harness.session.prompt("must remain blocked")).rejects.toThrow(
 			"Session persistence became indeterminate during automatic compaction",
@@ -895,12 +899,11 @@ describe("AgentSession compaction characterization", () => {
 			aborted: false,
 			willRetry: true,
 		});
-		const activeAssistantTexts = harness.sessionManager
-			.getBranch()
-			.filter((entry) => entry.type === "message" && entry.message.role === "assistant")
-			.flatMap((entry) =>
-				entry.type === "message" && entry.message.role === "assistant"
-					? entry.message.content
+		const activeAssistantTexts = buildSessionProjection(harness.sessionManager.getBranch())
+			.messages.filter((message) => message.role === "assistant")
+			.flatMap((message) =>
+				message.role === "assistant"
+					? message.content
 							.filter((block): block is { type: "text"; text: string } => block.type === "text")
 							.map((block) => block.text)
 					: [],
@@ -940,6 +943,9 @@ describe("AgentSession compaction characterization", () => {
 				tools: [largeTool],
 				extensionFactories: [
 					(pi) => {
+						pi.on("before_agent_start", (event) => {
+							event.systemPromptOptions.customPrompt = "Be concise.";
+						});
 						pi.on("session_before_compact", (event) => {
 							order.push("compaction");
 							observedSettings.push(event.preparation.settings);
@@ -973,7 +979,7 @@ describe("AgentSession compaction characterization", () => {
 			const agentStartsBefore = harness.eventsOfType("agent_start").length;
 			await harness.session.prompt("run the large tool");
 
-			expect(order).toEqual(["compaction", "provider"]);
+			expect(order, JSON.stringify(harness.eventsOfType("compaction_end"))).toEqual(["compaction", "provider"]);
 			expect(observedSettings).toEqual([{ enabled: true, reserveTokens: 1300, keepRecentTokens: 1750 }]);
 			expect(harness.eventsOfType("agent_start")).toHaveLength(agentStartsBefore + 1);
 			expect(harness.eventsOfType("compaction_start").at(-1)).toEqual({
@@ -1011,6 +1017,9 @@ describe("AgentSession compaction characterization", () => {
 			tools: [largeTool],
 			extensionFactories: [
 				(pi) => {
+					pi.on("before_agent_start", (event) => {
+						event.systemPromptOptions.customPrompt = "Be concise.";
+					});
 					pi.on("session_before_compact", async (event) => {
 						markCompactionStarted();
 						await compactionReleased;
@@ -1047,7 +1056,7 @@ describe("AgentSession compaction characterization", () => {
 		releaseCompaction();
 		await promptPromise;
 
-		expect(resumedRequest).toContain("change direction");
+		expect(resumedRequest, JSON.stringify(harness.eventsOfType("compaction_end"))).toContain("change direction");
 		expect(harness.faux.state.callCount).toBe(4);
 	});
 

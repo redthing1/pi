@@ -9,12 +9,14 @@ import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
 import { type PiManifest, readPiManifest } from "./pi-manifest.ts";
 import type { PackageSource, SettingsManager } from "./settings-manager.ts";
+import { BUILTIN_PATH_PREFIX } from "./source-info.ts";
 
 export interface PathMetadata {
 	source: string;
 	scope: SourceScope;
 	origin: "package" | "top-level";
 	baseDir?: string;
+	packageRoot?: string;
 }
 
 export interface ResolvedResource {
@@ -67,6 +69,8 @@ interface PackageManagerOptions {
 	cwd: string;
 	agentDir: string;
 	settingsManager: SettingsManager;
+	/** Names of built-in extensions, resolved as `builtin:<name>` extension resources. */
+	builtinExtensions?: string[];
 }
 
 type SourceScope = "user" | "project" | "temporary";
@@ -104,6 +108,8 @@ interface ResourceAccumulator {
  *   4  package resource (origin: "package")
  */
 function resourcePrecedenceRank(m: PathMetadata): number {
+	// Built-in extensions load after file and package extensions, whichever scope enables them.
+	if (m.source === "builtin") return 5;
 	if (m.origin === "package") return 4;
 	const scopeBase = m.scope === "project" ? 0 : 2;
 	return scopeBase + (m.source === "local" ? 0 : 1);
@@ -725,12 +731,14 @@ export class DefaultPackageManager implements PackageManager {
 	private cwd: string;
 	private agentDir: string;
 	private settingsManager: SettingsManager;
+	private builtinExtensions: string[];
 	private progressCallback: ProgressCallback | undefined;
 
 	constructor(options: PackageManagerOptions) {
 		this.cwd = resolvePath(options.cwd);
 		this.agentDir = resolvePath(options.agentDir);
 		this.settingsManager = options.settingsManager;
+		this.builtinExtensions = options.builtinExtensions ?? [];
 	}
 
 	setProgressCallback(callback: ProgressCallback | undefined): void {
@@ -869,6 +877,23 @@ export class DefaultPackageManager implements PackageManager {
 
 		this.addAutoDiscoveredResources(accumulator, globalSettings, projectSettings, globalBaseDir, projectBaseDir);
 
+		// Built-in extensions are enabled unless the user `extensions` setting excludes them, for example
+		// with `-builtin:mcp`. A matching `+`, `-`, or `!` entry in the project setting overrides that.
+		for (const name of this.builtinExtensions) {
+			const path = `${BUILTIN_PATH_PREFIX}${name}`;
+			const projectEnabled = applyAutoloadDisabledPatterns(
+				[path],
+				getOverridePatterns(projectSettings.extensions ?? []),
+				projectBaseDir,
+			).get(path);
+			this.addResource(
+				accumulator.extensions,
+				path,
+				{ source: "builtin", scope: projectEnabled === undefined ? "user" : "project", origin: "top-level" },
+				projectEnabled ?? isEnabledByOverrides(path, globalSettings.extensions ?? [], globalBaseDir),
+			);
+		}
+
 		return this.toResolvedPaths(accumulator);
 	}
 
@@ -878,7 +903,13 @@ export class DefaultPackageManager implements PackageManager {
 	): Promise<ResolvedPaths> {
 		const accumulator = this.createAccumulator();
 		const scope: SourceScope = options?.temporary ? "temporary" : options?.local ? "project" : "user";
-		const packageSources = sources.map((source) => ({ pkg: source as PackageSource, scope }));
+		// `-e builtin:<name>` loads a built-in extension; the resource loader reports unknown names.
+		for (const source of sources.filter((source) => source.startsWith(BUILTIN_PATH_PREFIX))) {
+			this.addResource(accumulator.extensions, source, { source: "builtin", scope, origin: "top-level" }, true);
+		}
+		const packageSources = sources
+			.filter((source) => !source.startsWith(BUILTIN_PATH_PREFIX))
+			.map((source) => ({ pkg: source as PackageSource, scope }));
 		await this.resolvePackageSources(packageSources, accumulator);
 		return this.toResolvedPaths(accumulator);
 	}
@@ -1014,6 +1045,7 @@ export class DefaultPackageManager implements PackageManager {
 			}
 			if (stats.isDirectory()) {
 				metadata.baseDir = resolved;
+				metadata.packageRoot = resolved;
 				const resources = this.collectPackageResources(resolved, accumulator, filter, metadata);
 				if (!resources) {
 					this.addResource(accumulator.extensions, resolved, metadata, true);

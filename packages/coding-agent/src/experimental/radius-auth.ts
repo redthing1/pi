@@ -16,15 +16,16 @@ export interface RadiusRelayAuth {
 /** Resolve explicit or stored Radius credentials anew for every relay connection attempt. */
 export class RadiusRelayAuthResolver {
 	readonly #input: AuthInput | undefined;
-	readonly #gateway: string;
+	readonly #gateway: string | undefined;
 	#modelRuntime: Promise<ModelRuntime> | undefined;
 
 	constructor(input?: AuthInput, gateway = getRadiusGatewayUrl()) {
 		this.#input = input;
-		this.#gateway = normalizeRadiusGatewayUrl(gateway);
+		this.#gateway = gateway ? normalizeRadiusGatewayUrl(gateway) : undefined;
 	}
 
 	get gateway(): string {
+		if (!this.#gateway) throw new Error("Set PI_RADIUS_GATEWAY to an operator-controlled relay endpoint");
 		return this.#gateway;
 	}
 
@@ -33,6 +34,10 @@ export class RadiusRelayAuthResolver {
 		readonly signal?: AbortSignal;
 	}): Promise<RadiusRelayAuth | undefined> {
 		options.signal?.throwIfAborted();
+		if (!this.#gateway) {
+			if (options.required) throw new Error("Set PI_RADIUS_GATEWAY to an operator-controlled relay endpoint");
+			return undefined;
+		}
 		if (process.env.PI_OFFLINE !== undefined) {
 			if (options.required) throw new Error("Radius relay connections are unavailable in offline mode");
 			return undefined;

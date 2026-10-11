@@ -1,6 +1,6 @@
 {
 	"name": "@earendil-works/pi-coding-agent",
-	"version": "0.86.1",
+	"version": "1.1.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
@@ -33,25 +33,30 @@
 		"!dist/cli/experimental",
 		"docs",
 		"examples",
+		"schemas",
 		"containerization.md",
 		"CHANGELOG.md"
 	],
 	"scripts": {
 		"clean": "shx rm -rf dist",
-		"build": "bun run build:unbundled && bun ../../scripts/build-coding-agent-bundle.mjs",
-		"build:unbundled": "tsgo -p tsconfig.build.json && shx chmod +x dist/cli.js dist/rpc-entry.js && bun run copy-assets",
-		"build:binary": "bun run --cwd ../tui build && bun run --cwd ../telemetry build && bun run --cwd ../ai build && bun run --cwd ../agent build && bun run --cwd ../protocol build && bun run --cwd ../client build && bun run build && bun build --compile --no-compile-autoload-bunfig ./dist/bun/cli.js ./src/utils/image-resize-worker.ts --outfile dist/pi && bun run copy-binary-assets",
+		"build": "bun run build:unbundled && node ../../scripts/build-coding-agent-bundle.mjs",
+		"build:unbundled": "tsc -p tsconfig.build.json && shx chmod +x dist/cli.js dist/rpc-entry.js && bun run copy-assets",
+		"build:binary": "bun run --cwd ../tui build && bun run --cwd ../telemetry build && bun run --cwd ../codemode build && bun run --cwd ../mcp build && bun run --cwd ../ai build && bun run --cwd ../durable build && bun run --cwd ../agent build && bun run --cwd ../protocol build && bun run --cwd ../client build && bun run build && bun build --compile --no-compile-autoload-bunfig --no-compile-autoload-dotenv ./dist/bun/cli.js ./src/utils/image-resize-worker.ts ./src/extensions/codemode/worker.ts --outfile dist/pi && bun run copy-binary-assets",
 		"copy-assets": "shx mkdir -p dist/modes/interactive/theme && shx cp src/modes/interactive/theme/*.json dist/modes/interactive/theme/ && shx mkdir -p dist/modes/interactive/assets && shx cp src/modes/interactive/assets/*.png dist/modes/interactive/assets/ && shx mkdir -p dist/core/export-html/vendor && shx cp src/core/export-html/template.html src/core/export-html/template.css src/core/export-html/template.js dist/core/export-html/ && shx cp src/core/export-html/vendor/*.js dist/core/export-html/vendor/",
 		"copy-binary-assets": "shx cp package.json dist/ && shx cp README.md dist/ && shx cp CHANGELOG.md dist/ && shx mkdir -p dist/theme && shx cp src/modes/interactive/theme/*.json dist/theme/ && shx mkdir -p dist/assets && shx cp src/modes/interactive/assets/*.png dist/assets/ && shx mkdir -p dist/export-html/vendor && shx cp src/core/export-html/template.html dist/export-html/ && shx cp src/core/export-html/vendor/*.js dist/export-html/vendor/ && shx cp -r docs dist/ && shx cp -r examples dist/ && shx cp node_modules/@silvia-odwyer/photon-node/photon_rs_bg.wasm dist/",
 		"test": "vitest --run",
+		"generate:schemas": "node --import ./src/experimental/source-resolver.ts scripts/generate-schemas.ts",
 		"prepublishOnly": "bun run clean && bun run build"
 	},
 	"dependencies": {
-		"@earendil-works/chord": "^0.86.1",
-		"@earendil-works/pi-agent-core": "^0.86.1",
-		"@earendil-works/pi-ai": "^0.86.1",
-		"@earendil-works/pi-tui": "^0.86.1",
+		"@earendil-works/chord": "^1.1.0",
+		"@earendil-works/pi-agent-core": "^1.1.0",
+		"@earendil-works/pi-ai": "^1.1.0",
+		"@earendil-works/pi-codemode": "^1.1.0",
+		"@earendil-works/pi-mcp": "^1.1.0",
+		"@earendil-works/pi-tui": "^1.1.0",
 		"@silvia-odwyer/photon-node": "0.3.4",
+		"brace-expansion": "5.0.12",
 		"chalk": "6.0.0",
 		"cross-spawn": "7.0.6",
 		"diff": "8.0.4",
@@ -62,8 +67,9 @@
 		"jiti": "2.7.0",
 		"minimatch": "10.2.6",
 		"proper-lockfile": "4.1.2",
-		"typebox": "1.3.25",
-		"undici": "8.10.1",
+		"quickjs-wasi": "3.6.2",
+		"typebox": "1.3.27",
+		"undici": "8.10.2",
 		"yaml": "2.9.0"
 	},
 	"overrides": {
@@ -71,18 +77,18 @@
 		"rimraf": "6.1.2"
 	},
 	"devDependencies": {
-		"@earendil-works/pi-client": "^0.86.1",
-		"@earendil-works/pi-protocol": "^0.86.1",
-		"@earendil-works/pi-server": "^0.86.1",
+		"@earendil-works/pi-client": "^1.1.0",
+		"@earendil-works/pi-protocol": "^1.1.0",
+		"@earendil-works/pi-server": "^1.1.0",
 		"@types/cross-spawn": "6.0.6",
 		"@types/hosted-git-info": "3.0.5",
 		"@types/node": "22.19.19",
 		"@types/proper-lockfile": "4.1.4",
 		"marked": "18.0.11",
 		"shx": "0.4.0",
+		"vitest": "4.1.11",
 		"strip-ansi": "7.2.0",
-		"typescript": "5.9.3",
-		"vitest": "4.1.9"
+		"@earendil-works/pi-durable": "^1.1.0"
 	},
 	"keywords": [
 		"coding-agent",

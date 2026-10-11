@@ -2,8 +2,9 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { type Component, CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import { areExperimentalFeaturesEnabled } from "../../../core/experimental.ts";
+import type { ContextUsage } from "../../../core/extensions/types.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
-import { addUsageToTotals, createUsageTotals } from "../../../core/usage-totals.ts";
+import { addUsageToTotals, createUsageTotals, type UsageTotals } from "../../../core/usage-totals.ts";
 import { theme } from "../theme/theme.ts";
 
 /**
@@ -43,6 +44,17 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
 	return relativeToHome === "" ? "~" : `~${sep}${relativeToHome}`;
 }
 
+interface SessionStats {
+	session: AgentSession;
+	sessionId: string;
+	leafId: string | null;
+	entryCount: number;
+	limitsModel: unknown;
+	usageTotals: UsageTotals;
+	latestCacheHitRate: number | undefined;
+	contextUsage: ContextUsage | undefined;
+}
+
 /**
  * Footer component that shows pwd, token stats, and context usage.
  * Computes token/context stats from session, gets git branch and extension statuses from provider.
@@ -53,6 +65,7 @@ export class FooterComponent implements Component {
 	private footerData: ReadonlyFooterDataProvider;
 	private historySearch: { query: string; noMatch: boolean } | undefined;
 	private workspaceLabel: string | undefined;
+	private sessionStats?: SessionStats;
 
 	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider) {
 		this.session = session;
@@ -91,31 +104,34 @@ export class FooterComponent implements Component {
 		// Git watcher cleanup handled by provider
 	}
 
-	render(width: number): string[] {
-		if (this.historySearch) {
-			const prompt = theme.fg("dim", "Search  ");
-			const cursor = `${CURSOR_MARKER}\x1b[7m \x1b[0m`;
-			const result = this.historySearch.noMatch ? theme.fg("warning", "  no results") : "";
-			const hints = theme.fg("dim", "enter use · esc cancel");
-			const fixedWidth = visibleWidth(prompt) + visibleWidth(cursor) + visibleWidth(result);
-			const showHints = fixedWidth + visibleWidth(hints) + 2 <= width;
-			const queryWidth = Math.max(0, width - fixedWidth - (showHints ? visibleWidth(hints) + 2 : 0));
-			const query = truncateToWidth(this.historySearch.query, queryWidth, "");
-			const left = prompt + theme.fg("accent", query) + cursor + result;
-			return [
-				left +
-					" ".repeat(Math.max(0, width - visibleWidth(left) - (showHints ? visibleWidth(hints) : 0))) +
-					(showHints ? hints : ""),
-			];
+	/**
+	 * Usage totals and context usage scan the whole session, and the footer renders on every frame.
+	 * Entries are append-only and every append moves the leaf, so the results only change with the
+	 * session, leaf, entry count, or the model whose context window applies.
+	 */
+	private getSessionStats(): SessionStats {
+		const sessionManager = this.session.sessionManager;
+		const entryCount = sessionManager.getEntryCount();
+		const sessionId = sessionManager.getSessionId();
+		const leafId = sessionManager.getLeafId();
+		const limitsModel = this.session.routedModel?.model ?? this.session.model;
+		const cached = this.sessionStats;
+		if (
+			cached &&
+			cached.session === this.session &&
+			cached.sessionId === sessionId &&
+			cached.leafId === leafId &&
+			cached.entryCount === entryCount &&
+			cached.limitsModel === limitsModel
+		) {
+			return cached;
 		}
-
-		const state = this.session.state;
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
 		const usageTotals = createUsageTotals();
 		let latestCacheHitRate: number | undefined;
 
-		for (const entry of this.session.sessionManager.getEntries()) {
+		for (const entry of sessionManager.getEntries()) {
 			if (entry.type === "usage") {
 				addUsageToTotals(usageTotals, entry.usage);
 			} else if (entry.type === "message" && entry.message.role === "assistant") {
@@ -135,6 +151,39 @@ export class FooterComponent implements Component {
 		// Calculate context usage from session (handles compaction correctly).
 		// After compaction, tokens are unknown until the next LLM response.
 		const contextUsage = this.session.getContextUsage();
+		this.sessionStats = {
+			session: this.session,
+			sessionId,
+			leafId,
+			entryCount,
+			limitsModel,
+			usageTotals,
+			latestCacheHitRate,
+			contextUsage,
+		};
+		return this.sessionStats;
+	}
+
+	render(width: number): string[] {
+		if (this.historySearch) {
+			const prompt = theme.fg("dim", "Search  ");
+			const cursor = `${CURSOR_MARKER}\x1b[7m \x1b[0m`;
+			const result = this.historySearch.noMatch ? theme.fg("warning", "  no results") : "";
+			const hints = theme.fg("dim", "enter use · esc cancel");
+			const fixedWidth = visibleWidth(prompt) + visibleWidth(cursor) + visibleWidth(result);
+			const showHints = fixedWidth + visibleWidth(hints) + 2 <= width;
+			const queryWidth = Math.max(0, width - fixedWidth - (showHints ? visibleWidth(hints) + 2 : 0));
+			const query = truncateToWidth(this.historySearch.query, queryWidth, "");
+			const left = prompt + theme.fg("accent", query) + cursor + result;
+			return [
+				left +
+					" ".repeat(Math.max(0, width - visibleWidth(left) - (showHints ? visibleWidth(hints) : 0))) +
+					(showHints ? hints : ""),
+			];
+		}
+
+		const state = this.session.state;
+		const { usageTotals, latestCacheHitRate, contextUsage } = this.getSessionStats();
 		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
 		const contextPercentValue = contextUsage?.percent ?? 0;
 		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
@@ -221,6 +270,12 @@ export class FooterComponent implements Component {
 		if (clientZdr || remoteZdr) {
 			const zdrLabel = clientZdr && remoteZdr ? "zdr" : clientZdr ? "zdr-c" : "zdr-s";
 			rightSideWithoutProvider += ` • ${zdrLabel}`;
+		}
+		// A virtual model routes each request; show where the latest response went.
+		const routed = this.session.routedModel;
+		if (routed) {
+			const level = routed.thinkingLevel ? ` • ${routed.thinkingLevel}` : "";
+			rightSideWithoutProvider += ` → ${routed.model.id}${level}`;
 		}
 
 		// Prepend the provider in parentheses if there are multiple providers and there's enough room

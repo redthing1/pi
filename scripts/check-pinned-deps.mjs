@@ -1,6 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseConfigFileTextToJson } from "typescript";
 
 const dependencySections = ["dependencies", "devDependencies", "optionalDependencies"];
 const exactVersionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -74,11 +73,8 @@ function sortedRecord(record = {}) {
 
 const rootPackageJson = JSON.parse(readFileSync("package.json", "utf8"));
 const expectedWorkspacePaths = new Set(["", ...rootPackageJson.workspaces.flatMap(expandWorkspacePattern)]);
-const parsedLockfile = parseConfigFileTextToJson("bun.lock", readFileSync("bun.lock", "utf8"));
-if (parsedLockfile.error) {
-	failures.push(`bun.lock: ${parsedLockfile.error.messageText}`);
-} else {
-	const lockWorkspaces = parsedLockfile.config.workspaces ?? {};
+try {
+	const lockWorkspaces = Bun.JSON5.parse(readFileSync("bun.lock", "utf8")).workspaces ?? {};
 	for (const workspacePath of expectedWorkspacePaths) {
 		const manifestPath = workspacePath ? join(workspacePath, "package.json") : "package.json";
 		const packageJson = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -102,6 +98,8 @@ if (parsedLockfile.error) {
 	for (const workspacePath of Object.keys(lockWorkspaces)) {
 		if (!expectedWorkspacePaths.has(workspacePath)) failures.push(`bun.lock: unexpected workspace ${workspacePath}`);
 	}
+} catch (error) {
+	failures.push(`bun.lock: ${error.message}`);
 }
 
 if (failures.length > 0) {

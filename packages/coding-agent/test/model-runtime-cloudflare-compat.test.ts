@@ -1,11 +1,19 @@
 import { complete, resetApiProviders } from "@earendil-works/pi-ai/compat";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 
-function createFetchMock() {
-	return vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => {
+interface CapturedRequest {
+	url: string;
+	headers: Headers;
+}
+
+function createCapturingFetch(): { fetch: typeof globalThis.fetch; requests: CapturedRequest[] } {
+	const requests: CapturedRequest[] = [];
+	const fetch: typeof globalThis.fetch = async (input, init) => {
+		const request = new Request(input, init);
+		requests.push({ url: request.url, headers: request.headers });
 		const chunk = {
 			id: "chatcmpl-test",
 			object: "chat.completion.chunk",
@@ -18,19 +26,8 @@ function createFetchMock() {
 			status: 200,
 			headers: { "content-type": "text/event-stream" },
 		});
-	});
-}
-
-function expectCloudflareRequest(fetchMock: ReturnType<typeof createFetchMock>, expectMaskedHeaders: boolean): void {
-	const [input, init] = fetchMock.mock.calls[0];
-	const url = input instanceof Request ? input.url : input.toString();
-	const headers = new Headers(input instanceof Request ? input.headers : init?.headers);
-	expect(url).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat/chat/completions");
-	expect(headers.get("cf-aig-authorization")).toBe("Bearer test-token");
-	if (expectMaskedHeaders) {
-		expect(headers.has("authorization")).toBe(false);
-		expect(headers.has("x-api-key")).toBe(false);
-	}
+	};
+	return { fetch, requests };
 }
 
 async function createCloudflareRuntime(): Promise<{ modelRuntime: ModelRuntime; modelRegistry: ModelRegistry }> {
@@ -47,6 +44,8 @@ async function createCloudflareRuntime(): Promise<{ modelRuntime: ModelRuntime; 
 	return { modelRuntime, modelRegistry: new ModelRegistry(modelRuntime) };
 }
 
+const CLOUDFLARE_COMPAT_URL = "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat/chat/completions";
+
 describe("ModelRegistry Cloudflare compat streaming", () => {
 	it("materializes the Cloudflare endpoint through ModelRuntime streaming", async () => {
 		const { modelRuntime } = await createCloudflareRuntime();
@@ -54,11 +53,14 @@ describe("ModelRegistry Cloudflare compat streaming", () => {
 		expect(model).toBeDefined();
 		expect(model?.api).toBe("openai-completions");
 
-		const fetchMock = createFetchMock();
 		resetApiProviders();
-		const result = await modelRuntime.completeSimple(model!, { messages: [] }, { fetch: fetchMock });
-		expect(result.errorMessage).toBeUndefined();
-		expectCloudflareRequest(fetchMock, false);
+		const { fetch, requests } = createCapturingFetch();
+		const result = await modelRuntime.completeSimple(model!, { messages: [] }, { fetch });
+
+		expect(result.stopReason).toBe("stop");
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe(CLOUDFLARE_COMPAT_URL);
+		expect(requests[0].headers.get("cf-aig-authorization")).toBe("Bearer test-token");
 	});
 
 	it("materializes the Cloudflare endpoint after extension-style auth resolution", async () => {
@@ -76,9 +78,14 @@ describe("ModelRegistry Cloudflare compat streaming", () => {
 			"x-api-key": null,
 		});
 
-		const fetchMock = createFetchMock();
-		const result = await complete(model!, { messages: [] }, { ...auth, fetch: fetchMock });
-		expect(result.errorMessage).toBeUndefined();
-		expectCloudflareRequest(fetchMock, true);
+		const { fetch, requests } = createCapturingFetch();
+		const result = await complete(model!, { messages: [] }, { ...auth, fetch });
+
+		expect(result.stopReason).toBe("stop");
+		expect(requests).toHaveLength(1);
+		expect(requests[0].url).toBe(CLOUDFLARE_COMPAT_URL);
+		expect(requests[0].headers.get("cf-aig-authorization")).toBe("Bearer test-token");
+		expect(requests[0].headers.has("authorization")).toBe(false);
+		expect(requests[0].headers.has("x-api-key")).toBe(false);
 	});
 });

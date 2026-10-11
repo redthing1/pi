@@ -101,6 +101,13 @@ afterEach(() => {
 });
 
 describe("experimental Radius relay", () => {
+	test("requires an explicit operator endpoint before authenticating", async () => {
+		vi.stubEnv("PI_RADIUS_GATEWAY", "");
+		const auth = new RadiusRelayAuthResolver({ type: "token", token: "fixture" });
+		await expect(auth.resolve({ required: false })).resolves.toBeUndefined();
+		await expect(auth.resolve({ required: true })).rejects.toThrow("operator-controlled relay endpoint");
+	});
+
 	test("matches the Radius multiplexing envelope", () => {
 		const payload = Uint8Array.from([0, 1, 2, 255]);
 		const parsed = parseRelayDataFrame(encodeRelayDataFrame(connectionId, payload));
@@ -133,7 +140,7 @@ describe("experimental Radius relay", () => {
 		const host = new RadiusRelayHost({
 			serverId,
 			server,
-			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }),
+			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }, "https://gateway.example"),
 			webSocketFactory: webSockets.factory,
 			onStatus: (status) => statuses.push(status.status),
 		});
@@ -167,7 +174,7 @@ describe("experimental Radius relay", () => {
 		const host = new RadiusRelayHost({
 			serverId,
 			server: { accept: vi.fn() } as unknown as Pick<Server, "accept">,
-			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }),
+			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }, "https://gateway.example"),
 			webSocketFactory: webSockets.factory,
 			onStatus: (status) => statuses.push(status.status),
 		});
@@ -189,7 +196,7 @@ describe("experimental Radius relay", () => {
 		const onError = vi.fn();
 		const transportPromise = createRadiusClientTransportFactory({
 			serverId,
-			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }),
+			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }, "https://gateway.example"),
 			webSocketFactory: webSockets.factory,
 		})({ onData, onClose, onError });
 		await vi.waitFor(() => expect(webSockets.sockets).toHaveLength(1));
@@ -214,7 +221,7 @@ describe("experimental Radius relay", () => {
 		const onError = vi.fn();
 		const transportPromise = createRadiusClientTransportFactory({
 			serverId,
-			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }),
+			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }, "https://gateway.example"),
 			webSocketFactory: webSockets.factory,
 		})({ onData: vi.fn(), onClose, onError });
 		await vi.waitFor(() => expect(webSockets.sockets).toHaveLength(1));
@@ -232,7 +239,7 @@ describe("experimental Radius relay", () => {
 		const webSockets = socketFactory();
 		const opening = createRadiusClientTransportFactory({
 			serverId,
-			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }),
+			auth: new RadiusRelayAuthResolver({ type: "token", token: "secret" }, "https://gateway.example"),
 			webSocketFactory: webSockets.factory,
 		})({ onData: vi.fn(), onClose: vi.fn(), onError: vi.fn() });
 		const failure = expect(opening).rejects.toThrow("Radius WebSocket connection failed");

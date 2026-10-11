@@ -2,11 +2,13 @@ import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { ENV_AGENT_DIR } from "../src/config.ts";
 
 const cliPath = resolve(__dirname, "../src/cli.ts");
-const repoRoot = resolve(__dirname, "../../..");
+// --import takes a module specifier, not a filesystem path.
+const sourceResolverUrl = pathToFileURL(resolve(__dirname, "../src/experimental/source-resolver.ts")).href;
 
 const tempDirs: string[] = [];
 
@@ -28,8 +30,9 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 	mkdirSync(agentDir, { recursive: true });
 
 	return await new Promise((resolvePromise, reject) => {
-		const child = spawn(process.execPath, ["--no-install", cliPath, ...args], {
-			cwd: repoRoot,
+		const runtimeArgs = ["--import", sourceResolverUrl];
+		const child = spawn("node", [...runtimeArgs, cliPath, ...args], {
+			cwd: tempRoot,
 			env: {
 				...process.env,
 				[ENV_AGENT_DIR]: agentDir,

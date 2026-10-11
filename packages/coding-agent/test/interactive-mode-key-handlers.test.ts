@@ -4,6 +4,7 @@ import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { getEditorTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 class FakeTerminal implements Terminal {
+	setProgramStatus(): void {}
 	columns = 80;
 	rows = 24;
 	kittyProtocolActive = true;

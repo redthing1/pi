@@ -6,6 +6,7 @@ import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { ZDR_EXPORT_PATH_REQUIRED_MESSAGE, ZDR_MODEL_REQUIRED_MESSAGE } from "../src/core/privacy.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import type { BashOperations } from "../src/core/tools/bash.ts";
+import { createHarness } from "./suite/harness.ts";
 
 describe("zero-data-retention mode", () => {
 	let tempDir: string;
@@ -208,5 +209,59 @@ describe("zero-data-retention mode", () => {
 		} finally {
 			session.dispose();
 		}
+	});
+});
+
+describe("session output storage", () => {
+	it("uses the workspace backend and propagates its failure without local fallback", async () => {
+		let fail = false;
+		const harness = await createHarness({
+			extensionFactories: [
+				(pi) => {
+					pi.on("output_file", (event) => {
+						if (fail) throw new Error("workspace unavailable");
+						expect(event.data).toBe("complete output");
+						return { path: "/workspace/fixture-output.txt" };
+					});
+				},
+			],
+		});
+		try {
+			const ctx = harness.session.extensionRunner.createContext();
+			await expect(ctx.writeOutputFile("fixture", ".txt", "complete output")).resolves.toBe(
+				"/workspace/fixture-output.txt",
+			);
+			fail = true;
+			await expect(ctx.writeOutputFile("fixture", ".txt", "complete output")).rejects.toThrow(
+				"workspace unavailable",
+			);
+		} finally {
+			harness.cleanup();
+		}
+	});
+
+	it("keeps full output readable privately until disposal", async () => {
+		const root = join(tmpdir(), `pi-output-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(root, { mode: 0o700 });
+		const runtime = await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false });
+		const { session } = await createAgentSession({
+			cwd: root,
+			agentDir: join(root, "agent"),
+			modelRuntime: runtime,
+			privacy: { clientZdr: true, remoteZdr: false },
+		});
+		let path: string | undefined;
+		try {
+			const ctx = session.extensionRunner.createContext();
+			path = await ctx.writeOutputFile("contract", ".txt", "complete fixture output");
+			expect(readFileSync(path, "utf8")).toBe("complete fixture output");
+			expect(statSync(path).mode & 0o777).toBe(0o600);
+			expect(statSync(dirname(path)).mode & 0o777).toBe(0o700);
+			await expect(ctx.writeOutputFile("../escape", ".txt", "fixture")).rejects.toThrow("Invalid output file name");
+		} finally {
+			session.dispose();
+			rmSync(root, { recursive: true, force: true });
+		}
+		expect(path && existsSync(path)).toBe(false);
 	});
 });
