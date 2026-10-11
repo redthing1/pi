@@ -12,6 +12,7 @@ This private fork stays close to upstream while enforcing reproducible source bu
 - Prefer narrow configuration and focused adaptations over broad rewrites, fork-only abstractions, compatibility shims, or preserving obsolete structure.
 - Treat upstream as untrusted at the supply-chain boundary. Revalidate dependency, installation, update, package-loading, automation, and security-policy changes independently.
 - Verify preserved behavior with stable positive contract tests. Do not add issue-specific regression tombstones by default.
+- Keep documentation proportional. Document lasting contracts in their authoritative home and correct affected interface docs. Do not litter code, docs, changelogs, or living notes with per-change tombstones or duplicate explanations; a small fix does not require a documentation trail.
 
 ## Supply-chain boundary
 

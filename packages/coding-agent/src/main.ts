@@ -467,12 +467,6 @@ function buildSessionOptions(
 	// Model from CLI
 	// - supports --provider <name> --model <pattern>
 	// - supports --model <provider>/<pattern>
-	if (parsed.provider && !parsed.model) {
-		diagnostics.push({
-			type: "error",
-			message: `--provider requires --model (for example: --provider ${parsed.provider} --model <pattern>)`,
-		});
-	}
 	if (parsed.model) {
 		const resolved = resolveCliModel({
 			cliProvider: parsed.provider,
@@ -911,7 +905,7 @@ export async function main(args: string[], options?: MainOptions) {
 			if (!sessionOptions.model) {
 				diagnostics.push({
 					type: "error",
-					message: "--api-key requires a model to be specified via --model, --provider/--model, or --models",
+					message: "--api-key requires a selected model (use --model, --provider, or --models)",
 				});
 			} else {
 				await modelRuntime.setRuntimeApiKey(sessionOptions.model.provider, parsed.apiKey);

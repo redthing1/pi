@@ -61,11 +61,11 @@ pi --model sonnet:high
 See [Choose a Model](models.md) for model selection and [Providers](providers.md) for credentials.
 
 - `--provider <name>`<br>
-  Restricts `--model` lookup to one provider. It requires `--model`.
+  Restricts model selection and cycling to one provider. Without `--model`, a new session uses the last model used with that provider, the saved default if it is in scope, or the first available model in scope.
 - `--model <pattern>`<br>
   Selects by exact ID or fuzzy ID/name match. It accepts `provider/id` and an optional `:<thinking>` suffix.
 - `--api-key <key>`<br>
-  Uses a non-persistent API-key override. It requires a model selected through `--model` or `--models`.
+  Uses a non-persistent API-key override. It requires a model selected through `--model`, `--provider`, or `--models`.
 - `--thinking <level>`<br>
   Sets `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. It overrides a `--model` suffix and is clamped to the model's capabilities.
 - `--models <patterns>`<br>
