@@ -297,8 +297,6 @@ async function runBuild(bundle) {
 			"packages/telemetry",
 			"packages/ai",
 			"packages/agent",
-			"packages/protocol",
-			"packages/client",
 		].map((workspace) => ({
 			label: `${workspace} build`,
 			args: ["--cwd", workspace, "run", "build"],

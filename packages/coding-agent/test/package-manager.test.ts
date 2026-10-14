@@ -1,5 +1,5 @@
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DefaultPackageManager, type ProgressEvent, type ResolvedResource } from "../src/core/package-manager.ts";
@@ -911,6 +911,21 @@ Content`,
 	});
 
 	describe("pattern filtering in top-level arrays", () => {
+		it("should expand ~ in exclusion and exact patterns", async () => {
+			const skillsDir = join(tempDir, "extra", "skills");
+			for (const name of ["keep", "glob-excluded", "exact-excluded"]) {
+				mkdirSync(join(skillsDir, name), { recursive: true });
+				writeFileSync(join(skillsDir, name, "SKILL.md"), `---\nname: ${name}\ndescription: ${name}\n---\n`);
+			}
+			const skillsPath = `~/${normalizeForMatch(relative(homedir(), skillsDir))}`;
+			settingsManager.setSkillPaths([skillsPath, `!${skillsPath}/glob-*`, `-${skillsPath}/exact-excluded`]);
+
+			const result = await packageManager.resolve();
+			expect(result.skills.some((r) => isEnabled(r, "keep/SKILL.md"))).toBe(true);
+			expect(result.skills.some((r) => isDisabled(r, "glob-excluded/SKILL.md"))).toBe(true);
+			expect(result.skills.some((r) => isDisabled(r, "exact-excluded/SKILL.md"))).toBe(true);
+		});
+
 		it("should exclude extensions with ! pattern", async () => {
 			const extDir = join(agentDir, "extensions");
 			mkdirSync(extDir, { recursive: true });

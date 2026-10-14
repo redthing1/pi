@@ -285,7 +285,13 @@ describe("AgentSession concurrent prompt guard", () => {
 		await session.abort();
 		await firstPrompt.catch(() => {});
 
-		expect(sawSteeringMessage).toBe(true);
+		expect(sawSteeringMessage).toBe(false);
+		expect(
+			session.messages.some(
+				(message) => message.role === "user" && JSON.stringify(message.content).includes("Steer from extension"),
+			),
+		).toBe(true);
+		expect(session.isIdle).toBe(true);
 	});
 
 	it("should allow prompt() after previous completes", async () => {
@@ -444,8 +450,7 @@ describe("AgentSession concurrent prompt guard", () => {
 					streamingBehavior?: "steer" | "followUp",
 				) => Promise<{ action: "continue" }>;
 				emitBeforeAgentStart: (
-					prompt: string,
-					images: unknown,
+					trigger: unknown,
 					systemPromptOptions: BuildSystemPromptOptions,
 				) => Promise<{ messages: []; systemPromptOptions: NormalizedBuildSystemPromptOptions }>;
 				invalidate: (message?: string) => void;
@@ -465,7 +470,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				return undefined;
 			},
 			emitInput: async () => ({ action: "continue" }),
-			emitBeforeAgentStart: async (_prompt, _images, systemPromptOptions) => ({
+			emitBeforeAgentStart: async (_trigger, systemPromptOptions) => ({
 				messages: [],
 				systemPromptOptions: normalizeBuildSystemPromptOptions(systemPromptOptions),
 			}),
@@ -591,8 +596,7 @@ describe("AgentSession concurrent prompt guard", () => {
 					streamingBehavior?: "steer" | "followUp",
 				) => Promise<{ action: "continue" }>;
 				emitBeforeAgentStart: (
-					prompt: string,
-					images: unknown,
+					trigger: unknown,
 					systemPromptOptions: BuildSystemPromptOptions,
 				) => Promise<{ messages: []; systemPromptOptions: NormalizedBuildSystemPromptOptions }>;
 				invalidate: (message?: string) => void;
@@ -608,7 +612,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				return undefined;
 			},
 			emitInput: async () => ({ action: "continue" }),
-			emitBeforeAgentStart: async (_prompt, _images, systemPromptOptions) => ({
+			emitBeforeAgentStart: async (_trigger, systemPromptOptions) => ({
 				messages: [],
 				systemPromptOptions: normalizeBuildSystemPromptOptions(systemPromptOptions),
 			}),

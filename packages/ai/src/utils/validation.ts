@@ -315,10 +315,8 @@ export function validateToolCall(tools: Tool[], toolCall: ToolCall): any {
  * @throws Error with formatted message if validation fails
  */
 export function validateToolArguments(tool: Tool, toolCall: ToolCall): any {
-	if (toolCall.argumentsParseError) {
-		throw new Error(
-			`Tool call "${toolCall.name}" was not executed: the provider returned incomplete or malformed JSON arguments. Re-issue the tool call with complete JSON arguments.`,
-		);
+	if (toolCall.argumentsError) {
+		throw new Error(`Invalid arguments for tool "${toolCall.name}": ${toolCall.argumentsError}`);
 	}
 	const args = structuredClone(toolCall.arguments);
 	normalizeOptionalNulls(args, tool.parameters as JsonSchemaObject);

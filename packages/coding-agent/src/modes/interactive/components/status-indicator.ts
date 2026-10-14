@@ -85,7 +85,7 @@ export type CompactionStatusReason = "manual" | "threshold" | "overflow";
 export class CompactionStatusIndicator extends StatusIndicator {
 	private readonly label: string;
 
-	constructor(ui: TUI, reason: CompactionStatusReason) {
+	constructor(ui: TUI, reason: CompactionStatusReason, colorFn?: (text: string) => string) {
 		const label =
 			reason === "manual"
 				? "Compacting context..."
@@ -93,8 +93,8 @@ export class CompactionStatusIndicator extends StatusIndicator {
 		super(
 			"compaction",
 			ui,
-			(spinner) => theme.fg("accent", spinner),
-			(text) => theme.fg("muted", text),
+			colorFn ?? ((spinner) => theme.fg("accent", spinner)),
+			colorFn ?? ((text) => theme.fg("muted", text)),
 			label,
 		);
 		this.label = label;

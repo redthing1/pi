@@ -39,7 +39,7 @@ function walk(directory, stopAtPackages = false) {
 
 function dependencyName(specifier) {
 	if (!specifier || specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("#")) return;
-	if (specifier.startsWith("node:")) return;
+	if (specifier.startsWith("node:") || specifier.startsWith("cloudflare:")) return;
 	if (builtins.has(specifier)) return;
 	return specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
 }

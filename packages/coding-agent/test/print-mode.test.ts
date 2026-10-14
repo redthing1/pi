@@ -159,4 +159,16 @@ describe("runPrintMode", () => {
 		expect(session.prompt).not.toHaveBeenCalled();
 		expect(runtimeHost.dispose).toHaveBeenCalledOnce();
 	});
+
+	it("warns on stderr and returns non-zero when the response was truncated", async () => {
+		const runtimeHost = createRuntimeHost(createAssistantMessage({ stopReason: "length" }));
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const exitCode = await runPrintMode(runtimeHost as unknown as Parameters<typeof runPrintMode>[0], {
+			mode: "text",
+		});
+
+		expect(exitCode).toBe(1);
+		expect(errorSpy).toHaveBeenCalled();
+	});
 });

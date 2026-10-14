@@ -6,6 +6,7 @@
 ### Fixed
 
 - Provider routing identities are now runtime-only and no longer expose durable Session IDs.
+## [1.2.0] - 2026-10-12
 
 ## [1.1.0] - 2026-10-07
 

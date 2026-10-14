@@ -819,7 +819,7 @@ describe("agentLoop with AgentMessage", () => {
 									id: "tool-1",
 									name: "noop",
 									arguments: {},
-									argumentsParseError: true,
+									argumentsError: "Incomplete JSON arguments",
 								},
 							],
 							"toolUse",
@@ -839,7 +839,7 @@ describe("agentLoop with AgentMessage", () => {
 		expect(toolEnd?.type === "tool_execution_end" && toolEnd.isError).toBe(true);
 		if (toolEnd?.type === "tool_execution_end") {
 			const text = toolEnd.result.content.find((part: { type: string; text?: string }) => part.type === "text");
-			expect(text?.type === "text" ? text.text : "").toContain("was not executed");
+			expect(text?.type === "text" ? text.text : "").toContain("Incomplete JSON arguments");
 		}
 	});
 

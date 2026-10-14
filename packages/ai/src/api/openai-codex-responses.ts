@@ -224,6 +224,7 @@ function compressRequestBodyZstd(bodyJson: string): Uint8Array<ArrayBuffer> | nu
 		const compressed = zlib.zstdCompressSync(bodyJson, {
 			params: { [zlib.constants.ZSTD_c_compressionLevel]: REQUEST_COMPRESSION_ZSTD_LEVEL },
 		});
+		// A copy owns a plain ArrayBuffer, which fetch accepts as a body under every lib.
 		return new Uint8Array(compressed);
 	} catch {
 		return null;

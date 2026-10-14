@@ -76,6 +76,7 @@ describe("AgentSession retry and event characterization", () => {
 			bunSocketCloseMessage,
 		]);
 		expect(harness.sessionManager.buildSessionContext().messages.map((message) => message.role)).toEqual([
+			"system",
 			"user",
 			"assistant",
 		]);
@@ -105,6 +106,7 @@ describe("AgentSession retry and event characterization", () => {
 
 		expect(harness.sessionManager.getEntries().some((entry) => entry.type === "custom")).toBe(true);
 		expect(harness.sessionManager.buildSessionContext().messages.map((message) => message.role)).toEqual([
+			"system",
 			"user",
 			"assistant",
 		]);
@@ -257,10 +259,19 @@ describe("AgentSession retry and event characterization", () => {
 		expect(harness.session.isRetrying).toBe(false);
 		expect(harness.eventsOfType("auto_retry_end").map((event) => event.finalError)).toContain("Retry cancelled");
 		expect(harness.faux.state.callCount).toBe(1);
-		expect(harness.session.messages[harness.session.messages.length - 1]?.role).toBe("assistant");
+		expect(
+			harness.sessionManager
+				.getEntries()
+				.some(
+					(entry) =>
+						entry.type === "message" &&
+						entry.message.role === "assistant" &&
+						entry.message.stopReason === "error",
+				),
+		).toBe(true);
 		expect(harness.sessionManager.buildSessionContext().messages.map((message) => message.role)).toEqual([
+			"system",
 			"user",
-			"assistant",
 		]);
 	});
 
