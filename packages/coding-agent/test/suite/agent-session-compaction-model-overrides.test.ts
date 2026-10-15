@@ -5,7 +5,7 @@ import { createHarness, type Harness } from "./harness.ts";
 
 function seedHistory(harness: Harness, totalTokens = 650): string {
 	const model = harness.session.model!;
-	const timestamp = Date.now() + harness.session.messages.length;
+	const timestamp = harness.session.messages.length;
 	let recentUserId = "";
 	for (const [index, label] of ["old", "recent"].entries()) {
 		recentUserId = harness.sessionManager.appendMessage({
@@ -33,7 +33,7 @@ describe("AgentSession compaction model overrides", () => {
 		while (harnesses.length) harnesses.pop()?.cleanup();
 	});
 
-	it.each(["manual", "pre-prompt", "next-boundary", "overflow"] as const)(
+	it.each(["manual", "first-request", "next-request", "overflow"] as const)(
 		"uses model token settings for %s compaction and extension preparation",
 		async (path) => {
 			const preparations: SessionBeforeCompactEvent[] = [];
@@ -64,7 +64,7 @@ describe("AgentSession compaction model overrides", () => {
 				],
 			});
 			harnesses.push(harness);
-			const recentUserId = seedHistory(harness, path === "pre-prompt" ? 2500 : 650);
+			const recentUserId = seedHistory(harness, path === "first-request" ? 2500 : 650);
 
 			if (path === "manual") {
 				await harness.session.compact();
@@ -75,12 +75,12 @@ describe("AgentSession compaction model overrides", () => {
 								fauxAssistantMessage("", { stopReason: "error", errorMessage: "prompt is too long" }),
 								fauxAssistantMessage("recovered"),
 							]
-						: path === "next-boundary"
+						: path === "next-request"
 							? [fauxAssistantMessage("z".repeat(8000)), fauxAssistantMessage("done")]
 							: [fauxAssistantMessage("done")],
 				);
 				await harness.session.prompt("continue");
-				if (path === "next-boundary") await harness.session.prompt("continue again");
+				if (path === "next-request") await harness.session.prompt("continue again");
 			}
 
 			expect(preparations).toHaveLength(1);
@@ -92,8 +92,17 @@ describe("AgentSession compaction model overrides", () => {
 			expect(preparations[0]?.reason).toBe(
 				path === "manual" ? "manual" : path === "overflow" ? "overflow" : "threshold",
 			);
-			if (path === "manual" || path === "pre-prompt") {
+			if (path === "manual") {
 				expect(preparations[0]?.preparation.firstKeptEntryId).toBe(recentUserId);
+			} else if (path === "first-request") {
+				const kept = harness.sessionManager.getEntry(preparations[0]!.preparation.firstKeptEntryId!);
+				expect(kept).toMatchObject({
+					type: "message",
+					message: {
+						role: "user",
+						content: [{ type: "text", text: "continue" }],
+					},
+				});
 			}
 			expect(harness.eventsOfType("compaction_end")).toHaveLength(1);
 			expect(harness.eventsOfType("compaction_end")[0]).toMatchObject({
@@ -129,8 +138,14 @@ describe("AgentSession compaction model overrides", () => {
 		if (path === "manual") await harness.session.compact();
 		else await harness.session.prompt("continue");
 		expect(budgets).toEqual([1600]);
+		const retainedId =
+			path === "manual"
+				? recentUserId
+				: harness.sessionManager
+						.getBranch()
+						.findLast((entry) => entry.type === "message" && entry.message.role === "user")?.id;
 		expect(harness.sessionManager.getEntries().find((entry) => entry.type === "compaction")).toMatchObject({
-			firstKeptEntryId: recentUserId,
+			firstKeptEntryId: retainedId,
 			summary: "built-in summary",
 		});
 		expect(harness.getPendingResponseCount()).toBe(0);

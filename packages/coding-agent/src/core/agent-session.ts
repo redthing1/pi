@@ -3594,18 +3594,16 @@ export class AgentSession {
 		// Skip compaction checks if this assistant message is older than the latest
 		// compaction boundary. This prevents a stale pre-compaction usage/error
 		// from retriggering compaction on the first prompt after compaction.
-		const compactionEntry = getLatestCompactionEntry(this.sessionManager.getBranch());
-		const assistantIsFromBeforeCompaction =
-			compactionEntry !== null && assistantMessage.timestamp <= new Date(compactionEntry.timestamp).getTime();
-		if (assistantIsFromBeforeCompaction) {
+		const branch = this.sessionManager.getBranch();
+		const assistantEntryId = this._findPersistedMessageEntryId(assistantMessage);
+		const assistantIndex = assistantEntryId ? branch.findIndex((entry) => entry.id === assistantEntryId) : -1;
+		if (assistantIndex >= 0 && assistantIndex < branch.findLastIndex((entry) => entry.type === "compaction"))
 			return false;
-		}
 
 		// Explicit/silent context overflow still uses context metadata.
 		// A length stop is recoverable when output ended below the model's original desired limit,
 		// independent of the configured context size or any context-clamped provider request limit.
 		const currentProjection = this.sessionManager.buildSessionProjection();
-		const assistantEntryId = this._findPersistedMessageEntryId(assistantMessage);
 		const assistantIsProjected =
 			assistantEntryId === undefined ||
 			currentProjection.entries.some(
@@ -3613,8 +3611,6 @@ export class AgentSession {
 					entry.sourceEntry.id === assistantEntryId &&
 					entry.messages.some((message) => message.role === "assistant"),
 			);
-		const branch = this.sessionManager.getBranch();
-		const assistantIndex = assistantEntryId ? branch.findIndex((entry) => entry.id === assistantEntryId) : -1;
 		const entriesAfterAssistant = assistantIndex >= 0 ? branch.slice(assistantIndex + 1) : [];
 		const hasPostAssistantContextEdit = entriesAfterAssistant.some((entry) => entry.type === "context_edit");
 		const latestAssistantEdit = entriesAfterAssistant
@@ -3660,13 +3656,8 @@ export class AgentSession {
 			}
 
 			this._overflowRecoveryAttempted = true;
-			const previousLeafId = this.sessionManager.getLeafId();
 			this._omitRecoveryAttempt(assistantMessage, toolResults);
 			const retry = await this._runOverflowCompaction(assistantMessage);
-			if (!retry && !this._fatalSessionError && previousLeafId) {
-				this.sessionManager.branch(previousLeafId);
-				this._refreshFinalizedContext();
-			}
 			if (retry) this._failedResponse = assistantMessage;
 			return retry;
 		}
@@ -3705,10 +3696,8 @@ export class AgentSession {
 			let extensionCompaction: CompactionResult | undefined;
 
 			if (this._extensionRunner.hasHandlers("session_before_compact")) {
-				const sourceContext = this._lastDispatchedContext;
-				if (!sourceContext) {
-					throw new Error("Overflow recovery has no prepared provider context");
-				}
+				const sourceContext =
+					this._lastDispatchedContext ?? (await this._prepareCurrentSourceContext(abortController.signal));
 				const extensionResult = (await this._extensionRunner.emit({
 					type: "session_before_compact",
 					sourceContext: snapshotContext(sourceContext),

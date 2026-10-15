@@ -97,6 +97,10 @@ persist final assistant response
 
 If recovery compaction fails or is cancelled, Pi keeps the omission edits, appends no compaction, and schedules no internal retry. Existing queued work remains governed by ordinary steering and follow-up rules. `agent_before_settle` sees the repaired projection after recovery processing. Raw transcript history, exports, billing totals, and history-search extensions can still inspect the omitted attempt.
 
+Recovery follows entry order on the active branch, independent of message timestamps.
+When resuming without a previous provider-request snapshot, Pi prepares the current
+canonical context for the compaction hook.
+
 ### Split user-message spans
 
 A user-message span starts with a user message and includes all turns until the next user message. Normally, compaction cuts at user-message boundaries.

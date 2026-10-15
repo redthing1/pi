@@ -1164,7 +1164,7 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.eventsOfType("compaction_start")).toHaveLength(0);
 	});
 
-	it("keeps a truncated response coherent when overflow compaction is cancelled", async () => {
+	it("preserves raw truncated history while omitting it after cancelled recovery", async () => {
 		const harness = await createHarness({
 			models: [{ id: "faux-1", contextWindow: 1000, maxTokens: 100 }],
 			settings: { compaction: { keepRecentTokens: 1, reserveTokens: 0 } },
@@ -1180,10 +1180,11 @@ describe("AgentSession compaction characterization", () => {
 		await harness.session.prompt("x".repeat(5000));
 
 		expect(harness.faux.state.callCount).toBe(1);
-		expect(harness.session.getLastAssistantText()).toBe("partial response");
+		expect(harness.session.getLastAssistantText()).toBeUndefined();
 		const branch = harness.sessionManager.getBranch();
-		const lastEntry = branch[branch.length - 1];
-		expect(lastEntry?.type === "message" && lastEntry.message.role === "assistant").toBe(true);
+		const partial = branch.find((entry) => entry.type === "message" && entry.message.role === "assistant");
+		expect(partial).toMatchObject({ message: { content: [{ type: "text", text: "partial response" }] } });
+		expect(branch.at(-1)).toMatchObject({ type: "context_edit", targetId: partial?.id, replacement: null });
 		expect(harness.eventsOfType("compaction_end").at(-1)).toMatchObject({
 			reason: "overflow",
 			aborted: true,
