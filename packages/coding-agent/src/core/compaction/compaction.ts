@@ -903,7 +903,10 @@ export function prepareCompaction(
 	let previousSummary: string | undefined;
 	let boundaryStart = 0;
 	if (prevCompactionIndex >= 0) {
-		previousSummary = (projectedEntries[prevCompactionIndex].sourceEntry as CompactionEntry).summary;
+		const summary = projectedEntries[prevCompactionIndex].messages.find(
+			(message) => message.role === "compactionSummary",
+		);
+		previousSummary = summary?.summary;
 		// The canonical projection has already selected the previous compaction's retained tail.
 		boundaryStart = prevCompactionIndex === 0 ? 1 : 0;
 	}

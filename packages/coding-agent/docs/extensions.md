@@ -219,6 +219,12 @@ This fork supports authoritative in-memory skill and prompt-template replacement
 Command handlers receive `ExtensionCommandContext`, which adds operations for waiting until idle, reloading, tree navigation, and session replacement.
 These operations are command-only because calling them from lifecycle handlers can deadlock the runtime.
 
+`ctx.editCompactionSummary(entryId, summary)` corrects the active compaction while
+idle, preserving its boundary and subsequent messages. It appends a branch-local
+context edit, refreshes effective context, and starts no model request. Extensions
+own their summary formatting and editor UI; recheck the session and leaf after an
+editor closes to reject stale edits. Original entries remain available as history.
+
 Session replacement invalidates the old context. Capture only plain data before switching, then use the fresh context supplied to `withSession` for session-bound work.
 
 <a id="state-management"></a>

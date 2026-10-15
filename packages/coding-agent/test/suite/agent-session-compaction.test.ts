@@ -149,6 +149,52 @@ describe("AgentSession compaction characterization", () => {
 		}
 	});
 
+	it("lets a command correct active checkpoint memory without starting a run", async () => {
+		let checkpointId = "";
+		const harness = await createHarness({
+			extensionFactories: [
+				(pi) => {
+					pi.registerCommand("revise", {
+						handler: async (_args, ctx) => ctx.editCompactionSummary(checkpointId, "corrected memory"),
+					});
+					pi.on("session_before_compact", (event) => ({
+						compaction: {
+							summary: "original memory",
+							firstKeptEntryId: event.preparation.firstKeptEntryId,
+							tokensBefore: event.preparation.tokensBefore,
+						},
+					}));
+				},
+			],
+			settings: { compaction: { keepRecentTokens: 1 } },
+		});
+		harnesses.push(harness);
+		await harness.session.prompt("one");
+		await harness.session.prompt("two");
+		await harness.session.compact();
+		checkpointId = harness.sessionManager.getBranch().findLast((entry) => entry.type === "compaction")!.id;
+		await harness.session.prompt("after checkpoint");
+		const stats = harness.session.getSessionStats();
+		const runs = harness.eventsOfType("agent_start").length;
+		await harness.session.prompt("/revise");
+		expect(harness.session.messages).toContainEqual(
+			expect.objectContaining({ role: "compactionSummary", summary: "corrected memory" }),
+		);
+		expect(getUserTexts(harness)).toContain("after checkpoint");
+		expect(harness.sessionManager.getEntry(checkpointId)).toMatchObject({ summary: "original memory" });
+		expect(harness.eventsOfType("agent_start")).toHaveLength(runs);
+		expect(harness.session.getSessionStats().cost).toBe(stats.cost);
+		const correctedLeaf = harness.sessionManager.getLeafId();
+		harness.session.editCompactionSummary(checkpointId, "corrected memory");
+		expect(harness.sessionManager.getLeafId()).toBe(correctedLeaf);
+		expect(() => harness.session.editCompactionSummary(checkpointId, " ")).toThrow("empty");
+		expect(() => harness.session.editCompactionSummary("missing", "text")).toThrow("no longer active");
+		await harness.session.navigateTree(checkpointId);
+		expect(harness.session.messages).toContainEqual(
+			expect.objectContaining({ role: "compactionSummary", summary: "original memory" }),
+		);
+	});
+
 	it("manually compacts using an extension-provided summary", async () => {
 		const summaryUsage = {
 			input: 10,

@@ -432,6 +432,9 @@ export interface ExtensionToolContext extends ExtensionContext {
  * Includes session control methods only safe in user-initiated commands.
  */
 export interface ExtensionCommandContext extends ExtensionContext {
+	/** Correct the active compaction summary while idle, preserving its boundary and history. */
+	editCompactionSummary(entryId: string, summary: string): void;
+
 	/** Wait for the agent to finish streaming */
 	waitForIdle(): Promise<void>;
 
@@ -2308,6 +2311,8 @@ export interface ExtensionActions {
  * Required by all modes.
  */
 export interface ExtensionContextActions {
+	/** Command-only session operation, bound by AgentSession. */
+	editCompactionSummary?: ExtensionCommandContext["editCompactionSummary"];
 	writeOutputFile?: ExtensionContext["writeOutputFile"];
 	getModel: () => Model<any> | undefined;
 	getScopedModels: () => readonly ScopedModel[];

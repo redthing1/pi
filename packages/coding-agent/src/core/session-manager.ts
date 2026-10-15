@@ -190,7 +190,7 @@ export type ContextEditableContent =
 export interface ContextEditEntry extends SessionEntryBase {
 	type: "context_edit";
 	targetId: string;
-	/** Null omits the target from model context. A value replaces only its content. */
+	/** Null omits ordinary messages. A string also replaces a compaction's summary. */
 	replacement: { content: ContextEditableContent } | null;
 }
 
@@ -559,6 +559,10 @@ function projectContextEntry(entry: SessionEntry, edit: ContextEditEntry | undef
 	if (!edit) return messages;
 	const replacement = edit.replacement;
 	if (replacement === null) return [];
+	if (entry.type === "compaction" && typeof replacement.content === "string") {
+		const summary = replacement.content;
+		return messages.map((message) => (message.role === "compactionSummary" ? { ...message, summary } : message));
+	}
 
 	return messages.map((message) => {
 		if (
@@ -1542,12 +1546,19 @@ export class SessionManager {
 			throw new Error(`Entry ${targetId} is not on the active branch`);
 		}
 		const editable =
+			target.type === "compaction" ||
 			target.type === "custom_message" ||
 			(target.type === "message" &&
 				(target.message.role === "user" ||
 					target.message.role === "assistant" ||
 					target.message.role === "toolResult"));
 		if (!editable) throw new Error(`Entry ${targetId} does not contribute editable model content`);
+		if (
+			target.type === "compaction" &&
+			(replacement === null || typeof replacement.content !== "string" || !replacement.content.trim())
+		) {
+			throw new Error("Compaction summary replacement must be a non-empty string");
+		}
 		const targetRole = target.type === "message" ? target.message.role : "custom";
 		const normalizedReplacement =
 			replacement !== null &&

@@ -3352,7 +3352,13 @@ export class InteractiveMode {
 
 			case "entry_appended":
 				if (this.entriesRenderedByBoundaryCompaction.delete(event.entry.id)) break;
-				if (event.entry.type === "custom") {
+				if (
+					event.entry.type === "context_edit" &&
+					this.sessionManager.getEntry(event.entry.targetId)?.type === "compaction"
+				) {
+					this.rebuildChatFromMessages();
+					this.ui.requestRender();
+				} else if (event.entry.type === "custom") {
 					this.addCustomEntryToChat(event.entry);
 					this.ui.requestRender();
 				} else if (event.entry.type === "usage" && event.entry.kind === "cache_warm") {
@@ -3926,11 +3932,15 @@ export class InteractiveMode {
 	): void {
 		// Selection coordinates point into the transcript being replaced (#9311).
 		if (this.renderer instanceof TuiAltScreen) this.renderer.resetTextSelection();
+		const compaction = this.sessionManager
+			.buildSessionProjection()
+			.entries.find((entry) => entry.sourceEntry.type === "compaction");
 		const items = entries.flatMap((entry): RenderSessionItem[] => {
 			if (entry.type === "custom" || (entry.type === "usage" && entry.kind === "cache_warm")) {
 				return [entry];
 			}
-			const messages = sessionEntryToContextMessages(entry);
+			const messages =
+				entry.id === compaction?.sourceEntry.id ? compaction.messages : sessionEntryToContextMessages(entry);
 			if ((entry.type === "compaction" || entry.type === "branch_summary") && entry.usage && messages.length > 0) {
 				return [...messages, { type: "compaction_cost", kind: entry.type, usage: entry.usage }];
 			}

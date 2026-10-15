@@ -216,10 +216,17 @@ export function prepareBranchEntries(entries: SessionEntry[], tokenBudget: numbe
 	}
 
 	// Second pass: walk from newest to oldest, adding messages until token budget
+	const summaryEdits = new Map<string, string>();
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
-		const message = getMessageFromEntry(entry);
+		if (entry.type === "context_edit" && typeof entry.replacement?.content === "string") {
+			if (!summaryEdits.has(entry.targetId)) summaryEdits.set(entry.targetId, entry.replacement.content);
+		}
+		let message = getMessageFromEntry(entry);
 		if (!message) continue;
+		if (message.role === "compactionSummary" && summaryEdits.has(entry.id)) {
+			message = { ...message, summary: summaryEdits.get(entry.id)! };
+		}
 
 		// Extract file ops from assistant messages (tool calls)
 		extractFileOpsFromMessage(message, fileOps);

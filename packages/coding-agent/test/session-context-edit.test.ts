@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	DEFAULT_COMPACTION_SETTINGS,
 	estimateProjectedContextTokens,
+	prepareBranchEntries,
 	prepareCompaction,
 } from "../src/core/compaction/index.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
@@ -34,6 +35,59 @@ function text(message: { content: string | Array<{ type: string; text?: string }
 }
 
 describe("session context edits", () => {
+	it("corrects checkpoint memory without changing its boundary or original history", () => {
+		const session = SessionManager.inMemory();
+		session.appendMessage({ role: "system", content: "system", timestamp: 1 });
+		const retainedId = session.appendMessage({ role: "user", content: "retained", timestamp: 2 });
+		const checkpointId = session.appendCompaction(
+			"original",
+			retainedId,
+			500,
+			{ strategy: "example" },
+			true,
+			undefined,
+			{
+				placement: "after-retained",
+				label: "example",
+			},
+		);
+		const checkpoint = session.getEntry(checkpointId);
+		const tailId = session.appendMessage(assistant("later answer"));
+		session.appendContextEdit(checkpointId, { content: "corrected" });
+		const projection = session.buildSessionProjection();
+		expect(projection.messages.map((message) => message.role)).toEqual([
+			"system",
+			"user",
+			"compactionSummary",
+			"assistant",
+		]);
+		expect(projection.messages[2]).toMatchObject({ summary: "corrected", label: "example", tokensBefore: 500 });
+		expect(projection.messages[3]).toMatchObject({ usageContextValid: false });
+		expect(prepareBranchEntries(session.getBranch()).messages).toContainEqual(
+			expect.objectContaining({ role: "compactionSummary", summary: "corrected" }),
+		);
+		expect(estimateProjectedContextTokens(projection, session.getBranch()).usageTokens).toBe(0);
+		expect(session.getEntry(checkpointId)).toBe(checkpoint);
+		expect(checkpoint).toMatchObject({
+			summary: "original",
+			firstKeptEntryId: retainedId,
+			placement: "after-retained",
+			details: { strategy: "example" },
+		});
+		session.appendMessage({ role: "user", content: "next request ".repeat(100), timestamp: Date.now() });
+		expect(
+			prepareCompaction(session.getBranch(), { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 })
+				?.previousSummary,
+		).toBe("corrected");
+		session.appendCompaction("new checkpoint", retainedId, 100);
+		expect(
+			session.buildSessionProjection().messages.filter((message) => message.role === "compactionSummary"),
+		).toEqual([expect.objectContaining({ summary: "new checkpoint" })]);
+		session.branch(tailId);
+		expect(session.buildSessionProjection().messages[2]).toMatchObject({ summary: "original" });
+		expect(() => session.appendContextEdit(checkpointId, null)).toThrow("non-empty string");
+	});
+
 	it("omits a target only from model projection", () => {
 		const session = SessionManager.inMemory();
 		session.appendMessage({ role: "user", content: "request", timestamp: Date.now() });

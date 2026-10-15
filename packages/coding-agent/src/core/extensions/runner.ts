@@ -394,6 +394,7 @@ export class ExtensionRunner {
 		throw new Error("Output storage is not bound");
 	};
 	private compactFn: (options?: CompactOptions) => void = () => {};
+	private editCompactionSummaryFn: ExtensionContextActions["editCompactionSummary"];
 	private getSystemPromptFn: () => string = () => "";
 	private getSystemPromptOptionsFn: () => BuildSystemPromptOptions = () =>
 		normalizeBuildSystemPromptOptions({ cwd: this.cwd });
@@ -471,6 +472,7 @@ export class ExtensionRunner {
 		this.shutdownHandler = contextActions.shutdown;
 		this.getContextUsageFn = contextActions.getContextUsage;
 		this.compactFn = contextActions.compact;
+		this.editCompactionSummaryFn = contextActions.editCompactionSummary;
 		this.getSystemPromptFn = contextActions.getSystemPrompt;
 		this.getSystemPromptOptionsFn =
 			contextActions.getSystemPromptOptions ?? (() => normalizeBuildSystemPromptOptions({ cwd: this.cwd }));
@@ -1031,6 +1033,11 @@ export class ExtensionRunner {
 			{},
 			Object.getOwnPropertyDescriptors(this.createContext()),
 		) as ExtensionCommandContext;
+		context.editCompactionSummary = (entryId, summary) => {
+			this.assertActive();
+			if (!this.editCompactionSummaryFn) throw new Error("Summary editing is not bound");
+			this.editCompactionSummaryFn(entryId, summary);
+		};
 		context.waitForIdle = () => {
 			this.assertActive();
 			return this.waitForIdleFn();

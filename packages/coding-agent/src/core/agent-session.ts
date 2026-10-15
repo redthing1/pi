@@ -3340,6 +3340,34 @@ export class AgentSession {
 		);
 	}
 
+	/** Append a branch-local correction without changing the compaction boundary. */
+	editCompactionSummary(entryId: string, summary: string): void {
+		if (this._fatalSessionError) throw new Error(this._fatalSessionError);
+		if (!this.isIdle || this.pendingMessageCount > 0)
+			throw new Error("Wait for the session to become idle before editing its summary.");
+		const projection = this.sessionManager.buildSessionProjection();
+		const active = projection.entries.find((entry) => entry.sourceEntry.type === "compaction");
+		if (active?.sourceEntry.id !== entryId) throw new Error("The selected compaction is no longer active.");
+		if (typeof summary !== "string" || !summary.trim()) throw new Error("Compaction summary must not be empty.");
+		if (active.messages.some((message) => message.role === "compactionSummary" && message.summary === summary))
+			return;
+		let editId: string;
+		try {
+			editId = this.sessionManager.appendContextEdit(entryId, { content: summary });
+		} catch (error) {
+			if (error instanceof SessionPersistenceError) {
+				this._fatalSessionError =
+					"Session persistence became indeterminate while editing the summary. Start or reopen a session before continuing.";
+			}
+			throw error;
+		}
+		this._cacheWarmer?.cancel();
+		this._lastDispatchedContext = undefined;
+		this._refreshFinalizedContext();
+		const entry = this.sessionManager.getEntry(editId);
+		if (entry) this._emit({ type: "entry_appended", entry });
+	}
+
 	private _clearManualCompactionState(): void {
 		this._compactionAbortController = undefined;
 		this._resolveIdleWaitIfIdle();
@@ -4014,6 +4042,7 @@ export class AgentSession {
 				writeOutputFile: async (prefix, extension, data) =>
 					(await runner.emitOutputFile({ type: "output_file", prefix, extension, data })) ??
 					writeOutputFile(prefix, extension, data, this._temporaryOutputDirectory),
+				editCompactionSummary: (entryId, summary) => this.editCompactionSummary(entryId, summary),
 				getModel: () => this.model,
 				getScopedModels: () => this._scopedModels,
 				isIdle: () => this.isIdle,
