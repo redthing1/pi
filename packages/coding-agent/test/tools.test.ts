@@ -757,20 +757,31 @@ describe("Coding Agent Tools", () => {
 					return { exitCode: 0 };
 				},
 			};
-			const guarded = createBashTool(testDir, {
+			const guarded = createBashToolDefinition(testDir, {
+				exposeSessionEnvironment: false,
 				commandPrefix: "prefix-command",
 				shellPath: "/synthetic/configured-shell",
 				spawnHook: (context) => ({ ...context, cwd: tmpdir(), command: `${context.command}\nspawn-hook` }),
-				launchHook: async (event) => {
-					launch = event;
-					return { operations: replacement };
-				},
 			});
 
-			const result = await guarded.execute("launch-call", { command: "submitted-command", timeout: 7 });
+			const context = fakeCtx(testDir);
+			context.prepareBashLaunch = async (event) => {
+				launch = event;
+				return { operations: replacement };
+			};
+			const result = await guarded.execute(
+				"launch-call",
+				{ command: "submitted-command", timeout: 7 },
+				undefined,
+				undefined,
+				context,
+			);
 
 			expect(launch).toEqual({
 				type: "bash_launch",
+				shell: "bash",
+				home: expect.any(String),
+				pathStyle: process.platform === "win32" ? "win32" : "posix",
 				source: "tool",
 				id: "launch-call",
 				submittedCommand: "submitted-command",
@@ -786,14 +797,13 @@ describe("Coding Agent Tools", () => {
 
 		it("should stop before execution when the finalized launch is blocked", async () => {
 			const operations = { exec: vi.fn(async () => ({ exitCode: 0 })) } satisfies BashOperations;
-			const guarded = createBashTool(testDir, {
-				operations,
-				launchHook: async () => ({ block: true, reason: "synthetic policy block" }),
-			});
+			const guarded = createBashToolDefinition(testDir, { operations, exposeSessionEnvironment: false });
+			const context = fakeCtx(testDir);
+			context.prepareBashLaunch = async () => ({ block: true, reason: "synthetic policy block" });
 
-			await expect(guarded.execute("blocked-launch", { command: "echo no" })).rejects.toThrow(
-				"synthetic policy block",
-			);
+			await expect(
+				guarded.execute("blocked-launch", { command: "echo no" }, undefined, undefined, context),
+			).rejects.toThrow("synthetic policy block");
 			expect(operations.exec).not.toHaveBeenCalled();
 		});
 
@@ -1044,7 +1054,9 @@ describe("Coding Agent Tools", () => {
 });
 
 function fakeCtx(cwd: string): ExtensionToolContext {
-	return { cwd } as ExtensionToolContext;
+	const context = { cwd } as ExtensionToolContext;
+	context.prepareBashLaunch = async () => undefined;
+	return context;
 }
 
 describe("tool cwd resolution", () => {

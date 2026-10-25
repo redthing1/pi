@@ -161,7 +161,7 @@ import {
 	type NormalizedBuildSystemPromptOptions,
 	normalizeBuildSystemPromptOptions,
 } from "./system-prompt.ts";
-import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
+import { type BashOperations, createLocalBashOperations, shellExecutionContext } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
 import { addUsageToTotals, combineUsage, createUsageTotals } from "./usage-totals.ts";
@@ -4222,10 +4222,6 @@ export class AgentSession {
 						commandPrefix: shellCommandPrefix,
 						shellPath,
 						temporaryOutputDirectory: this._temporaryOutputDirectory,
-						launchHook: (event) =>
-							this._extensionRunner.hasHandlers("bash_launch")
-								? this._extensionRunner.emitBashLaunch(event)
-								: undefined,
 					},
 					powershell: { temporaryOutputDirectory: this._temporaryOutputDirectory },
 				});
@@ -4465,15 +4461,17 @@ export class AgentSession {
 			const shellPath = this.settingsManager.getShellPath();
 			const resolvedCommand = prefix ? `${prefix}\n${command}` : command;
 			const operationsKind = options?.operations ? "custom" : "local";
+			const executionContext = shellExecutionContext(this.sessionManager.getCwd(), options?.operations);
 			const launchResult = this._extensionRunner.hasHandlers("bash_launch")
 				? await this._extensionRunner.emitBashLaunch(
 						Object.freeze({
 							type: "bash_launch",
 							source: "direct",
+							shell: "bash",
 							id: options?.id,
 							submittedCommand: command,
 							command: resolvedCommand,
-							cwd: this.sessionManager.getCwd(),
+							...executionContext,
 							operationsKind,
 							shellPath: operationsKind === "local" ? shellPath : undefined,
 						}),
@@ -4482,7 +4480,7 @@ export class AgentSession {
 			if (launchResult && "block" in launchResult) throw new Error(launchResult.reason);
 			const operations = launchResult?.operations ?? options?.operations ?? createLocalBashOperations({ shellPath });
 
-			const result = await executeBashWithOperations(resolvedCommand, this.sessionManager.getCwd(), operations, {
+			const result = await executeBashWithOperations(resolvedCommand, executionContext.cwd, operations, {
 				onChunk: (delta) => {
 					onChunk?.(delta);
 					this._emit({ type: "bash_execution_update", id: options?.id, delta });

@@ -414,6 +414,8 @@ export interface ExecuteToolOptions {
  * created with `createBashTool()` and run in a plain `Agent` or called directly, gets no context.
  */
 export interface ExtensionToolContext extends ExtensionContext {
+	/** Run the session's final shell launch guards, including for extension-backed shell tools. */
+	prepareBashLaunch(event: BashLaunchEvent): Promise<BashLaunchEventResult | undefined>;
 	/** Tools {@link executeTool} can call. */
 	readonly tools: readonly AgentTool[];
 	/**
@@ -1205,7 +1207,7 @@ export interface ThinkingLevelSelectEvent {
 export type BashLaunchSource = "tool" | "direct";
 
 /**
- * Fired immediately before Pi executes a finalized Bash command.
+ * Fired immediately before Pi executes a finalized Bash or PowerShell command.
  *
  * The event is frozen at runtime. Handlers may block the launch or replace the
  * Bash operations, but cannot rewrite the command or its execution context.
@@ -1214,14 +1216,18 @@ export interface BashLaunchEvent {
 	readonly type: "bash_launch";
 	/** Where the command originated. */
 	readonly source: BashLaunchSource;
+	/** Shell language used to interpret the command. */
+	readonly shell: "bash" | "powershell";
 	/** Optional tool-call or RPC identifier. */
 	readonly id?: string;
 	/** Command as submitted before Pi's configured command prefix is applied. */
 	readonly submittedCommand: string;
 	/** Exact command passed to the selected Bash operations. */
 	readonly command: string;
-	/** Exact working directory passed to the selected Bash operations. */
+	/** Filesystem identity of the backend that will execute the command. */
 	readonly cwd: string;
+	readonly home: string;
+	readonly pathStyle: "posix" | "win32";
 	/** Timeout in seconds, when the caller supplied one. */
 	readonly timeout?: number;
 	/** Whether Pi selected its local backend or caller-provided operations. */

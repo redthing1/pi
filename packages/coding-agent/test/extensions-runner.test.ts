@@ -1693,6 +1693,9 @@ describe("ExtensionRunner", () => {
 			const selected = await runner.emitBashLaunch(
 				Object.freeze({
 					type: "bash_launch",
+					shell: "bash",
+					home: "/synthetic/home",
+					pathStyle: "posix",
 					source: "direct",
 					submittedCommand: "echo ok",
 					command: "echo ok",
@@ -1729,6 +1732,9 @@ describe("ExtensionRunner", () => {
 				blockedRunner.emitBashLaunch(
 					Object.freeze({
 						type: "bash_launch",
+						shell: "bash",
+						home: "/synthetic/home",
+						pathStyle: "posix",
 						source: "direct",
 						submittedCommand: "echo no",
 						command: "echo no",

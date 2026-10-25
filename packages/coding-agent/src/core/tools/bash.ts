@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
-import { constants as osConstants } from "node:os";
+import { homedir, constants as osConstants } from "node:os";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { spawn } from "child_process";
 import { type Static, Type } from "typebox";
@@ -13,7 +13,7 @@ import {
 	trackDetachedChildPid,
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
-import type { BashLaunchEvent, BashLaunchEventResult, ExtensionContext, ToolDefinition } from "../extensions/types.ts";
+import type { BashLaunchEvent, ExtensionContext, ExtensionToolContext, ToolDefinition } from "../extensions/types.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { BASH_UPDATE_THROTTLE_MS, createShellRenderers } from "./renderers/bash.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -68,11 +68,15 @@ export interface BashToolDetails {
 	fullOutputPath?: string;
 }
 
+type ShellExecutionContext = Pick<BashLaunchEvent, "cwd" | "home" | "pathStyle">;
+
 /**
  * Pluggable operations for the bash tool.
  * Override these to delegate command execution to remote systems (for example SSH).
  */
 export interface BashOperations {
+	/** Destination identity. Omit for local execution using the supplied cwd. */
+	context?: ShellExecutionContext;
 	/** Whether this backend owns storage for truncated full output. */
 	managesFullOutput?: boolean;
 	/**
@@ -93,6 +97,12 @@ export interface BashOperations {
 			env?: NodeJS.ProcessEnv;
 		},
 	) => Promise<{ exitCode: number | null; fullOutputPath?: string }>;
+}
+
+export function shellExecutionContext(cwd: string, operations?: BashOperations): ShellExecutionContext {
+	return operations?.context
+		? { ...operations.context }
+		: { cwd, home: homedir(), pathStyle: process.platform === "win32" ? "win32" : "posix" };
 }
 
 /** Shared process execution used by the built-in shell tools. */
@@ -226,10 +236,6 @@ export interface BashToolOptions {
 	temporaryOutputDirectory?: string;
 	/** Hook to adjust command, cwd, or env before execution */
 	spawnHook?: BashSpawnHook;
-	/** Final, read-only launch guard invoked after command and spawn context resolution. */
-	launchHook?: (
-		event: BashLaunchEvent,
-	) => BashLaunchEventResult | Promise<BashLaunchEventResult | undefined> | undefined;
 }
 
 export type BashRenderState = {
@@ -239,7 +245,7 @@ export type BashRenderState = {
 };
 
 export interface ShellToolConfig {
-	name: string;
+	name: "bash" | "powershell";
 	label: string;
 	shellName: string;
 	prompt: string;
@@ -257,7 +263,6 @@ export function createShellToolDefinition(
 	const commandPrefix = options?.commandPrefix;
 	const exposeSessionEnvironment = options?.exposeSessionEnvironment ?? true;
 	const spawnHook = options?.spawnHook;
-	const launchHook = options?.launchHook;
 	const operationsKind = options?.operations ? "custom" : "local";
 	return {
 		name: config.name,
@@ -273,7 +278,7 @@ export function createShellToolDefinition(
 			{ command, timeout }: { command: string; timeout?: number },
 			signal?: AbortSignal,
 			onUpdate?,
-			ctx?: ExtensionContext,
+			ctx?: ExtensionToolContext,
 		) {
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(
@@ -283,20 +288,21 @@ export function createShellToolDefinition(
 				exposeSessionEnvironment,
 				ctx,
 			);
-			const launchHookResult = launchHook?.(
+			const executionContext = shellExecutionContext(spawnContext.cwd, ops);
+			const launchResult = await ctx?.prepareBashLaunch(
 				Object.freeze({
 					type: "bash_launch",
 					source: "tool",
+					shell: config.name,
 					id: _toolCallId,
 					submittedCommand: command,
 					command: spawnContext.command,
-					cwd: spawnContext.cwd,
+					...executionContext,
 					timeout,
 					operationsKind,
 					shellPath: operationsKind === "local" ? options?.shellPath : undefined,
 				}),
 			);
-			const launchResult = launchHookResult instanceof Promise ? await launchHookResult : launchHookResult;
 			if (launchResult && "block" in launchResult) throw new Error(launchResult.reason);
 			const launchOperations = launchResult?.operations ?? ops;
 			const output = new OutputAccumulator({
@@ -398,7 +404,7 @@ export function createShellToolDefinition(
 				let exitCode: number | null;
 				let operationFullOutputPath: string | undefined;
 				try {
-					const result = await launchOperations.exec(spawnContext.command, spawnContext.cwd, {
+					const result = await launchOperations.exec(spawnContext.command, executionContext.cwd, {
 						onData: handleData,
 						signal,
 						timeout,

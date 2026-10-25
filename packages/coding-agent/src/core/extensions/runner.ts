@@ -1000,6 +1000,12 @@ export class ExtensionRunner {
 		const runner = this;
 		// createContext() returns a fresh object, so adding properties does not affect other contexts.
 		return Object.defineProperties(this.createContext() as ExtensionToolContext, {
+			prepareBashLaunch: {
+				value: (event: BashLaunchEvent) => {
+					runner.assertActive();
+					return runner.emitBashLaunch(event);
+				},
+			},
 			tools: {
 				get() {
 					runner.assertActive();
@@ -1367,6 +1373,7 @@ export class ExtensionRunner {
 	}
 
 	async emitBashLaunch(event: BashLaunchEvent): Promise<BashLaunchEventResult | undefined> {
+		Object.freeze(event);
 		const ctx = this.createContext();
 		let selectedOperations: BashLaunchEventResult | undefined;
 
@@ -1375,6 +1382,13 @@ export class ExtensionRunner {
 				const handlerResult = (await handler(event, ctx)) as BashLaunchEventResult | undefined;
 				if (!handlerResult) continue;
 				if ("block" in handlerResult) return handlerResult;
+				const context = handlerResult.operations.context;
+				if (
+					context &&
+					(context.cwd !== event.cwd || context.home !== event.home || context.pathStyle !== event.pathStyle)
+				) {
+					throw new Error("Shell launch handlers cannot change the execution context");
+				}
 				selectedOperations ??= handlerResult;
 			}
 		}

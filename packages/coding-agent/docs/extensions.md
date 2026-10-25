@@ -127,6 +127,8 @@ Use `ctx.signal` for nested work owned by an active turn; commands and idle sess
 
 A `user_bash` handler that returns `undefined` passes the command to the next handler and then to local execution if no handler handles it. Returning `operations` or `result` stops propagation. A handler failure blocks the command rather than falling through to local execution.
 
+`bash_launch` guards finalized Bash and PowerShell execution in a session, including extension-backed tools and direct user Bash. Its frozen event includes `shell` and the destination's `cwd`, `home`, and `pathStyle`, supplied by remote backends as `BashOperations.context`. Handlers can block or replace execution without changing that identity. Shell factories dispatch the event through `ctx.prepareBashLaunch()`; standalone tools without session context do not dispatch extension events.
+
 <a id="custom-tools"></a>
 <a id="register-tools"></a>
 
