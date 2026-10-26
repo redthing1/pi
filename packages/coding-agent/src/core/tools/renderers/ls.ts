@@ -11,7 +11,7 @@ import { keyHint } from "../../../modes/interactive/components/keybinding-hints.
 import type { Theme } from "../../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../../extensions/types.ts";
 import type { LsToolDetails } from "../ls.ts";
-import { getTextOutput, renderToolPath, str } from "../render-utils.ts";
+import { getTextOutput, invalidArgText, renderToolPath, str } from "../render-utils.ts";
 import { DEFAULT_MAX_BYTES, formatSize } from "../truncate.ts";
 
 function formatLsCall(args: { path?: string; limit?: number } | undefined, theme: Theme, cwd: string): string {
@@ -19,7 +19,10 @@ function formatLsCall(args: { path?: string; limit?: number } | undefined, theme
 	const pathDisplay = renderToolPath(str(args?.path), theme, cwd, { emptyFallback: "." });
 	let text = `${theme.fg("toolTitle", theme.bold("ls"))} ${pathDisplay}`;
 	if (limit !== undefined) {
-		text += theme.fg("toolOutput", ` (limit ${limit})`);
+		text += theme.fg(
+			"toolOutput",
+			` (limit ${typeof limit === "number" && Number.isFinite(limit) ? limit : invalidArgText(theme)})`,
+		);
 	}
 	return text;
 }

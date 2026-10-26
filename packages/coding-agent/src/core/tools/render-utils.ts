@@ -1,7 +1,14 @@
 import * as os from "node:os";
 import { pathToFileURL } from "node:url";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import { getCapabilities, getImageDimensions, hyperlink, imageFallback } from "@earendil-works/pi-tui";
+import {
+	getCapabilities,
+	getImageDimensions,
+	hyperlink,
+	imageFallback,
+	safeTerminalLabel,
+	safeTerminalText,
+} from "@earendil-works/pi-tui";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../utils/ansi.ts";
 import { resolvePath } from "../../utils/paths.ts";
@@ -12,9 +19,9 @@ export function shortenPath(path: unknown): string {
 	if (typeof path !== "string") return "";
 	const home = os.homedir();
 	if (path.startsWith(home)) {
-		return `~${path.slice(home.length)}`;
+		return safeTerminalLabel(`~${path.slice(home.length)}`);
 	}
-	return path;
+	return safeTerminalLabel(path);
 }
 
 export function linkPath(styledText: string, rawPath: string, cwd: string): string {
@@ -52,7 +59,7 @@ export function replaceTabs(text: string): string {
 }
 
 export function normalizeDisplayText(text: string): string {
-	return text.replace(/\r/g, "");
+	return safeTerminalText(text.replace(/\r/g, ""));
 }
 
 export function getTextOutput(
@@ -64,7 +71,9 @@ export function getTextOutput(
 	const textBlocks = result.content.filter((c) => c.type === "text");
 	const imageBlocks = result.content.filter((c) => c.type === "image");
 
-	let output = textBlocks.map((c) => sanitizeBinaryOutput(stripAnsi(c.text || "")).replace(/\r/g, "")).join("\n");
+	let output = textBlocks
+		.map((c) => safeTerminalText(sanitizeBinaryOutput(stripAnsi(c.text || "")).replace(/\r/g, "")))
+		.join("\n");
 
 	const caps = getCapabilities();
 	if (imageBlocks.length > 0 && (!caps.images || !showImages)) {
@@ -95,7 +104,7 @@ const COLLAPSED_ARGS_CHARS = 100;
  * line below the title, with strings shown raw and continuation lines indented.
  */
 export function formatToolCallWithArgs(title: string, args: unknown, theme: Theme, expanded: boolean): string {
-	const header = theme.fg("toolTitle", theme.bold(title));
+	const header = theme.fg("toolTitle", theme.bold(safeTerminalLabel(title)));
 	if (args == null) return header;
 	const entries =
 		typeof args === "object" && !Array.isArray(args)
@@ -105,12 +114,14 @@ export function formatToolCallWithArgs(title: string, args: unknown, theme: Them
 	if (expanded) {
 		const lines = entries.map(([key, value]) => {
 			const text = typeof value === "string" ? value : (JSON.stringify(value, null, 2) ?? String(value));
-			return `  ${key}: ${replaceTabs(text).replace(/\r/g, "").split("\n").join("\n    ")}`;
+			return `  ${safeTerminalLabel(key)}: ${replaceTabs(safeTerminalText(text)).split("\n").join("\n    ")}`;
 		});
 		return `${header}\n${theme.fg("muted", lines.join("\n"))}`;
 	}
 	const pairs = entries.map(([key, value]) => `${key}=${JSON.stringify(value) ?? String(value)}`).join(" ");
-	const preview = pairs.length > COLLAPSED_ARGS_CHARS ? `${pairs.slice(0, COLLAPSED_ARGS_CHARS - 3)}...` : pairs;
+	const preview = safeTerminalLabel(
+		pairs.length > COLLAPSED_ARGS_CHARS ? `${pairs.slice(0, COLLAPSED_ARGS_CHARS - 3)}...` : pairs,
+	);
 	return `${header} ${theme.fg("muted", preview)}`;
 }
 

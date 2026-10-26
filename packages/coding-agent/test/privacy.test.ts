@@ -213,7 +213,7 @@ describe("zero-data-retention mode", () => {
 });
 
 describe("session output storage", () => {
-	it("uses the workspace backend and propagates its failure without local fallback", async () => {
+	it("uses the registered output owner and propagates its failure without fallback", async () => {
 		let fail = false;
 		const harness = await createHarness({
 			extensionFactories: [
@@ -221,7 +221,7 @@ describe("session output storage", () => {
 					pi.on("output_file", (event) => {
 						if (fail) throw new Error("workspace unavailable");
 						expect(event.data).toBe("complete output");
-						return { path: "/workspace/fixture-output.txt" };
+						return { path: "pi-output:0123456789abcdef0123456789abcdef" };
 					});
 				},
 			],
@@ -229,7 +229,7 @@ describe("session output storage", () => {
 		try {
 			const ctx = harness.session.extensionRunner.createContext();
 			await expect(ctx.writeOutputFile("fixture", ".txt", "complete output")).resolves.toBe(
-				"/workspace/fixture-output.txt",
+				"pi-output:0123456789abcdef0123456789abcdef",
 			);
 			fail = true;
 			await expect(ctx.writeOutputFile("fixture", ".txt", "complete output")).rejects.toThrow(

@@ -32,6 +32,27 @@ describe("BashExecutionComponent width handling (#2569)", () => {
 	beforeAll(() => {
 		initTheme(undefined, false);
 	});
+	it("renders streaming controls and compact shell labels as data", () => {
+		const control = "\x07\x1b]52;c;fixture\x07\x85";
+		for (const compact of [false, true]) {
+			const { stub } = createTuiStub(120);
+			const component = new BashExecutionComponent(`rg '${control}' /synthetic`, stub, false, {
+				compactExploration: compact,
+			});
+			try {
+				for (const character of `/synthetic/name${control}.txt\n`) {
+					component.appendOutput(character);
+					const text = component
+						.render(120)
+						.join("\n")
+						.replace(/\x1b\[[0-9;]*m/gu, "");
+					expect(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/u.test(text)).toBe(false);
+				}
+			} finally {
+				component.setComplete(0, false);
+			}
+		}
+	});
 
 	it("collapsed preview lines respect render-time width, not construction-time width", () => {
 		const wideWidth = 200;

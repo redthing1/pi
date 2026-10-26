@@ -352,7 +352,7 @@ export interface OutputFileEventResult {
 export interface ExtensionContext {
 	/** UI methods for user interaction */
 	ui: ExtensionUIContext;
-	/** Save full tool output through the active workspace, with session-owned local storage by default. */
+	/** Save full tool output in session-owned storage. An extension may return an opaque reference with its own reader. */
 	writeOutputFile(prefix: string, extension: string, data: string | Uint8Array): Promise<string>;
 	/** Current run mode. Use "tui" to guard terminal-only UI such as custom components. */
 	mode: ExtensionMode;

@@ -1,4 +1,4 @@
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { safeTerminalLabel, truncateToWidth } from "@earendil-works/pi-tui";
 import { invalidArgText, shortenPath, str } from "../../../core/tools/render-utils.ts";
 import { theme } from "../theme/theme.ts";
 import { formatBashExplorationSummary } from "./shell-exploration-summary.ts";
@@ -85,10 +85,10 @@ function formatGrepSummary(snapshot: ToolExecutionSnapshot): string {
 	const glob = argString(args, "glob");
 	let text =
 		`${formatAction("Search")} ` +
-		(pattern === null ? invalidArgText(theme) : theme.fg("accent", `/${pattern || ""}/`)) +
+		(pattern === null ? invalidArgText(theme) : theme.fg("accent", safeTerminalLabel(`/${pattern || ""}/`))) +
 		theme.fg("toolOutput", ` in ${formatPath(path, ".")}`);
 	if (glob) {
-		text += theme.fg("toolOutput", ` (${glob})`);
+		text += theme.fg("toolOutput", ` (${safeTerminalLabel(glob)})`);
 	}
 
 	const matchLimit = numberDetail(snapshot, "matchLimitReached");
@@ -107,7 +107,7 @@ function formatFindSummary(snapshot: ToolExecutionSnapshot): string {
 	const path = argString(args, "path");
 	let text =
 		`${formatAction("Find")} ` +
-		(pattern === null ? invalidArgText(theme) : theme.fg("accent", pattern || "")) +
+		(pattern === null ? invalidArgText(theme) : theme.fg("accent", safeTerminalLabel(pattern || ""))) +
 		theme.fg("toolOutput", ` in ${formatPath(path, ".")}`);
 
 	const resultLimit = numberDetail(snapshot, "resultLimitReached");

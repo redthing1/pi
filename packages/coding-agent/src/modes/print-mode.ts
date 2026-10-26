@@ -7,6 +7,7 @@
  */
 
 import type { AssistantMessage, ImageContent } from "@earendil-works/pi-ai";
+import { safeTerminalText } from "@earendil-works/pi-tui";
 import type { AgentSessionRuntime } from "../core/agent-session-runtime.ts";
 import { flushRawStdout, waitForRawStdoutBackpressure, writeRawStdout } from "../core/output-guard.ts";
 import { killTrackedDetachedChildren } from "../utils/shell.ts";
@@ -49,7 +50,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 		await runtimeHost.dispose();
 	};
 	const finishRequestedShutdown = (): number => {
-		if (shutdownErrorMessage) console.error(shutdownErrorMessage);
+		if (shutdownErrorMessage) console.error(safeTerminalText(shutdownErrorMessage));
 		return shutdownErrorMessage ? 1 : 0;
 	};
 
@@ -109,7 +110,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 				shutdownErrorMessage ??= errorMessage;
 			},
 			onError: (err) => {
-				console.error(`Extension error (${err.extensionPath}): ${err.error}`);
+				console.error(safeTerminalText(`Extension error (${err.extensionPath}): ${err.error}`));
 			},
 		});
 
@@ -156,12 +157,12 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 			if (lastMessage?.role === "assistant") {
 				const assistantMsg = lastMessage as AssistantMessage;
 				if (assistantMsg.stopReason === "error" || assistantMsg.stopReason === "aborted") {
-					console.error(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`);
+					console.error(safeTerminalText(assistantMsg.errorMessage || `Request ${assistantMsg.stopReason}`));
 					exitCode = 1;
 				} else {
 					for (const content of assistantMsg.content) {
 						if (content.type === "text") {
-							writeRawStdout(`${content.text}\n`);
+							writeRawStdout(`${process.stdout.isTTY ? safeTerminalText(content.text) : content.text}\n`);
 						}
 					}
 					if (assistantMsg.stopReason === "length") {
@@ -174,7 +175,7 @@ export async function runPrintMode(runtimeHost: AgentSessionRuntime, options: Pr
 
 		return exitCode;
 	} catch (error: unknown) {
-		console.error(error instanceof Error ? error.message : String(error));
+		console.error(safeTerminalText(error instanceof Error ? error.message : String(error)));
 		return 1;
 	} finally {
 		for (const cleanup of signalCleanupHandlers) {

@@ -34,6 +34,31 @@ function createAssistantMessage(
 }
 
 describe("AssistantMessageComponent", () => {
+	test.each(["stop", "error", "aborted"] as const)(
+		"escapes model text, thinking, and diagnostics without changing message data (%s)",
+		(stopReason) => {
+			initTheme("dark");
+			const payload = "before\x07\x1b]52;c;fixture\x07\x85after";
+			const message = createAssistantMessage(
+				[
+					{ type: "text", text: payload },
+					{ type: "thinking", thinking: payload },
+				],
+				{ stopReason },
+			);
+			message.errorMessage = payload;
+			const original = JSON.stringify(message);
+			const rendered = new AssistantMessageComponent(message)
+				.render(100)
+				.join("\n")
+				.replaceAll(OSC133_ZONE_START, "")
+				.replaceAll(OSC133_ZONE_END, "")
+				.replaceAll(OSC133_ZONE_FINAL, "")
+				.replace(/\x1b\[[0-9;]*m/gu, "");
+			expect(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/u.test(rendered)).toBe(false);
+			expect(JSON.stringify(message)).toBe(original);
+		},
+	);
 	test("adds OSC 133 zone markers to assistant messages without tool calls", () => {
 		initTheme("dark");
 

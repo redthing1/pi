@@ -31,6 +31,8 @@ import {
 	Markdown,
 	matchesKey,
 	Spacer,
+	safeTerminalLabel,
+	safeTerminalText,
 	setCapabilityOverrides,
 	setKeybindings,
 	type Terminal,
@@ -1363,7 +1365,7 @@ export class InteractiveMode {
 			result = `~${result.slice(home.length)}`;
 		}
 
-		return result;
+		return safeTerminalLabel(result);
 	}
 
 	private formatExtensionDisplayPath(path: string): string {
@@ -1377,7 +1379,7 @@ export class InteractiveMode {
 		const absolutePath = path.isAbsolute(p) ? path.resolve(p) : path.resolve(cwd, p);
 		const relativePath = getCwdRelativePath(absolutePath, cwd);
 		if (relativePath !== undefined) {
-			return relativePath;
+			return safeTerminalLabel(relativePath);
 		}
 
 		return this.formatDisplayPath(absolutePath);
@@ -1644,15 +1646,15 @@ export class InteractiveMode {
 
 			const sortedPaths = [...group.paths].sort((a, b) => a.path.localeCompare(b.path));
 			for (const item of sortedPaths) {
-				lines.push(theme.fg("dim", `    ${options.formatPath(item)}`));
+				lines.push(theme.fg("dim", `    ${safeTerminalLabel(options.formatPath(item))}`));
 			}
 
 			const sortedPackages = Array.from(group.packages.entries()).sort(([a], [b]) => a.localeCompare(b));
 			for (const [source, items] of sortedPackages) {
-				lines.push(`    ${theme.fg("mdLink", source)}`);
+				lines.push(`    ${theme.fg("mdLink", safeTerminalLabel(source))}`);
 				const sortedPackagePaths = [...items].sort((a, b) => a.path.localeCompare(b.path));
 				for (const item of sortedPackagePaths) {
-					lines.push(theme.fg("dim", `      ${options.formatPackagePath(item, source)}`));
+					lines.push(theme.fg("dim", `      ${safeTerminalLabel(options.formatPackagePath(item, source))}`));
 				}
 			}
 		}
@@ -1753,7 +1755,7 @@ export class InteractiveMode {
 
 		const sectionHeader = (name: string, color: ThemeColor = "mdHeading") => theme.fg(color, `[${name}]`);
 		const formatCompactList = (items: string[], options?: { sort?: boolean }): string => {
-			const labels = items.map((item) => item.trim()).filter((item) => item.length > 0);
+			const labels = items.map((item) => safeTerminalLabel(item.trim())).filter((item) => item.length > 0);
 			if (options?.sort !== false) {
 				labels.sort((a, b) => a.localeCompare(b));
 			}
@@ -3678,6 +3680,7 @@ export class InteractiveMode {
 	 * we update the previous status line instead of appending new ones to avoid log spam.
 	 */
 	private showStatus(message: string): void {
+		message = safeTerminalText(message);
 		const children = this.chatContainer.children;
 		const last = children.length > 0 ? children[children.length - 1] : undefined;
 		const secondLast = children.length > 1 ? children[children.length - 2] : undefined;
@@ -4470,12 +4473,14 @@ export class InteractiveMode {
 	}
 
 	showError(errorMessage: string): void {
+		errorMessage = safeTerminalText(errorMessage);
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new ThemedText(() => theme.fg("error", `Error: ${errorMessage}`), this.outputPad, 0));
 		this.ui.requestRender();
 	}
 
 	showWarning(warningMessage: string): void {
+		warningMessage = safeTerminalText(warningMessage);
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new ThemedText(() => theme.fg("warning", `Warning: ${warningMessage}`), 1, 0));
 		this.ui.requestRender();

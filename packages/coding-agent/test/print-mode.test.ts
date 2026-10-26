@@ -91,6 +91,35 @@ afterEach(() => {
 });
 
 describe("runPrintMode", () => {
+	it.each([false, true])("preserves piped text and escapes terminal text (TTY=%s)", async (tty) => {
+		const text = "synthetic\x07\x1b]52;c;fixture\x07\x85";
+		const runtime = createRuntimeHost(createAssistantMessage({ text }));
+		const descriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+		const chunks: string[] = [];
+		Object.defineProperty(process.stdout, "isTTY", { value: tty, configurable: true });
+		vi.spyOn(process.stdout, "write").mockImplementation(
+			(
+				chunk: string | Uint8Array,
+				encodingOrCallback?: BufferEncoding | ((error?: Error | null) => void),
+				callback?: (error?: Error | null) => void,
+			) => {
+				chunks.push(String(chunk));
+				if (typeof encodingOrCallback === "function") encodingOrCallback();
+				else callback?.();
+				return true;
+			},
+		);
+		try {
+			expect(await runPrintMode(runtime as unknown as Parameters<typeof runPrintMode>[0], { mode: "text" })).toBe(0);
+			const output = chunks.join("");
+			if (tty) expect(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/u.test(output)).toBe(false);
+			else expect(output).toBe(`${text}\n`);
+			expect(runtime.session.state.messages[0]?.content).toEqual([{ type: "text", text }]);
+		} finally {
+			if (descriptor) Object.defineProperty(process.stdout, "isTTY", descriptor);
+			else Reflect.deleteProperty(process.stdout, "isTTY");
+		}
+	});
 	it("emits session_shutdown in text mode", async () => {
 		const runtimeHost = createRuntimeHost(createAssistantMessage({ text: "done" }));
 		const { session } = runtimeHost;

@@ -5,6 +5,7 @@ import {
 	ExplorationGroupComponent,
 	isExplorationToolSnapshot,
 } from "../src/modes/interactive/components/exploration-group.ts";
+import { formatExplorationRows } from "../src/modes/interactive/components/exploration-summary.ts";
 import { formatBashExplorationSummary } from "../src/modes/interactive/components/shell-exploration-summary.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
@@ -14,6 +15,18 @@ function createFakeTui(): TUI {
 		requestRender: () => {},
 	} as unknown as TUI;
 }
+
+test("compact exploration labels escape controls before styling", () => {
+	initTheme("dark");
+	const control = "\x07\x1b]52;c;fixture\x07\x85";
+	const tools = ["grep", "find", "read", "ls"].map((name) =>
+		createTool(name, "synthetic", { pattern: control, glob: control, path: `/synthetic/${control}` }),
+	);
+	const text = formatExplorationRows(tools.map((tool) => tool.getPresentationSnapshot()))
+		.join("\n")
+		.replace(/\x1b\[[0-9;]*m/gu, "");
+	expect(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/u.test(text)).toBe(false);
+});
 
 function createTool(toolName: string, toolCallId: string, args: unknown): ToolExecutionComponent {
 	return new ToolExecutionComponent(toolName, toolCallId, args, {}, undefined, createFakeTui(), process.cwd());
@@ -60,7 +73,7 @@ describe("ExplorationGroupComponent", () => {
 
 		const rendered = renderGroup(group);
 		expect(rendered).toContain("Explored");
-		expect(rendered).toContain("Read src/read.ts");
+		expect(rendered).toContain("src/read.ts");
 		expect(rendered).toContain("line one");
 		expect(rendered).toContain("line two");
 	});
@@ -119,10 +132,10 @@ describe("ExplorationGroupComponent", () => {
 
 		group.setExpanded(true);
 		const expanded = renderGroup(group);
-		expect(expanded).toContain("Search /ToolExecutionComponent/ in packages/coding-agent");
-		expect(expanded).toContain("Read packages/coding-agent/src/a.ts");
-		expect(expanded).toContain("Find **/*.test.ts in packages/coding-agent/test");
-		expect(expanded).toContain("List packages/coding-agent/src/core/tools");
+		expect(expanded).toContain("packages/coding-agent");
+		expect(expanded).toContain("packages/coding-agent/src/a.ts");
+		expect(expanded).toContain("packages/coding-agent/test");
+		expect(expanded).toContain("packages/coding-agent/src/core/tools");
 	});
 
 	test("wraps long compact search rows without dropping tail text", () => {

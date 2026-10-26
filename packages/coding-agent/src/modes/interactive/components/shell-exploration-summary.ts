@@ -1,3 +1,4 @@
+import { safeTerminalLabel } from "@earendil-works/pi-tui";
 import { shortenPath } from "../../../core/tools/render-utils.ts";
 import { theme } from "../theme/theme.ts";
 
@@ -37,7 +38,7 @@ export function formatBashExplorationSummary(options: {
 	if (!parsed) return undefined;
 
 	const label = options.status === "running" ? "Exploring" : "Explored";
-	const outputLabels = fileBasenamesFromOutput(options.output);
+	const outputLabels = fileBasenamesFromOutput(options.output).map(safeTerminalLabel);
 	const outputSuffix =
 		outputLabels.length > 0
 			? theme.fg("muted", ` (${outputLabels.slice(0, 5).join(", ")}${outputLabels.length > 5 ? ", ..." : ""})`)
@@ -54,7 +55,7 @@ export function formatBashExplorationSummary(options: {
 			return {
 				label,
 				row:
-					`${formatAction("Search")} ${theme.fg("accent", `/${parsed.pattern || "..."}/`)}` +
+					`${formatAction("Search")} ${theme.fg("accent", safeTerminalLabel(`/${parsed.pattern || "..."}/`))}` +
 					theme.fg("toolOutput", " in ") +
 					theme.fg("accent", formatDisplayPath(parsed.path, ".")) +
 					outputSuffix +
@@ -64,7 +65,7 @@ export function formatBashExplorationSummary(options: {
 			return {
 				label,
 				row:
-					`${formatAction("Find")} ${theme.fg("accent", parsed.pattern || "...")}` +
+					`${formatAction("Find")} ${theme.fg("accent", safeTerminalLabel(parsed.pattern || "..."))}` +
 					theme.fg("toolOutput", " in ") +
 					theme.fg("accent", formatDisplayPath(parsed.path, ".")) +
 					outputSuffix +

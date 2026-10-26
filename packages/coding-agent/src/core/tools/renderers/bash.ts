@@ -6,7 +6,7 @@
  * tool definition, so the tool's public shape is unchanged.
  */
 
-import { Container, Spacer, Text } from "@earendil-works/pi-tui";
+import { Container, Spacer, safeTerminalText, Text } from "@earendil-works/pi-tui";
 import { keyHint } from "../../../modes/interactive/components/keybinding-hints.ts";
 import { VisualLinePreview } from "../../../modes/interactive/components/visual-truncate.ts";
 import { theme } from "../../../modes/interactive/theme/theme.ts";
@@ -20,8 +20,14 @@ export const BASH_UPDATE_THROTTLE_MS = 100;
 function formatShellCall(args: { command?: string; timeout?: number } | undefined, prompt: string): string {
 	const command = str(args?.command);
 	const timeout = args?.timeout as number | undefined;
-	const timeoutSuffix = timeout ? theme.fg("muted", ` (timeout ${timeout}s)`) : "";
-	const commandDisplay = command === null ? invalidArgText(theme) : command ? command : theme.fg("toolOutput", "...");
+	const timeoutSuffix = timeout
+		? theme.fg(
+				"muted",
+				` (timeout ${typeof timeout === "number" && Number.isFinite(timeout) ? timeout : invalidArgText(theme)}s)`,
+			)
+		: "";
+	const commandDisplay =
+		command === null ? invalidArgText(theme) : command ? safeTerminalText(command) : theme.fg("toolOutput", "...");
 	return theme.fg("toolTitle", theme.bold(`${prompt} ${commandDisplay}`)) + timeoutSuffix;
 }
 function rebuildBashResultRenderComponent(
@@ -72,7 +78,7 @@ function rebuildBashResultRenderComponent(
 	if (truncation?.truncated || fullOutputPath) {
 		const warnings: string[] = [];
 		if (fullOutputPath) {
-			warnings.push(`Full output: ${fullOutputPath}`);
+			warnings.push(`Full output: ${safeTerminalText(fullOutputPath)}`);
 		}
 		if (truncation?.truncated) {
 			if (truncation.truncatedBy === "lines") {

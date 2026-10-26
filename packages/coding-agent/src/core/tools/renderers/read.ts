@@ -8,7 +8,7 @@
 
 import { basename, dirname, isAbsolute, relative, resolve as resolvePath, sep } from "node:path";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import { Text } from "@earendil-works/pi-tui";
+import { safeTerminalLabel, Text } from "@earendil-works/pi-tui";
 import { getReadmePath } from "../../../config.ts";
 import { keyHint, keyText } from "../../../modes/interactive/components/keybinding-hints.ts";
 import { getLanguageFromPath, highlightCode, type Theme } from "../../../modes/interactive/theme/theme.ts";
@@ -92,7 +92,7 @@ function formatCompactReadCall(
 	if (classification.kind === "skill") {
 		return (
 			theme.fg("customMessageLabel", `\x1b[1m[skill]\x1b[22m `) +
-			theme.fg("customMessageText", classification.label) +
+			theme.fg("customMessageText", safeTerminalLabel(classification.label)) +
 			styledReadLineRange(args, theme) +
 			expandHint
 		);
@@ -101,7 +101,7 @@ function formatCompactReadCall(
 	return (
 		theme.fg("toolTitle", theme.bold(`read ${classification.kind}`)) +
 		" " +
-		theme.fg("accent", classification.label) +
+		theme.fg("accent", safeTerminalLabel(classification.label)) +
 		styledReadLineRange(args, theme) +
 		expandHint
 	);

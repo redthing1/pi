@@ -6,7 +6,7 @@
  * definition, so the tool's public shape is unchanged.
  */
 
-import { Text } from "@earendil-works/pi-tui";
+import { safeTerminalLabel, Text } from "@earendil-works/pi-tui";
 import { keyHint } from "../../../modes/interactive/components/keybinding-hints.ts";
 import type { Theme } from "../../../modes/interactive/theme/theme.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../../extensions/types.ts";
@@ -23,10 +23,13 @@ function formatFindCall(args: { pattern: string; path?: string; limit?: number }
 	let text =
 		theme.fg("toolTitle", theme.bold("find")) +
 		" " +
-		(pattern === null ? invalidArg : theme.fg("accent", pattern || "")) +
+		(pattern === null ? invalidArg : theme.fg("accent", safeTerminalLabel(pattern || ""))) +
 		theme.fg("toolOutput", ` in ${path === null ? invalidArg : path}`);
 	if (limit !== undefined) {
-		text += theme.fg("toolOutput", ` (limit ${limit})`);
+		text += theme.fg(
+			"toolOutput",
+			` (limit ${typeof limit === "number" && Number.isFinite(limit) ? limit : invalidArg})`,
+		);
 	}
 	return text;
 }

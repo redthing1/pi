@@ -1,4 +1,4 @@
-import { type Component, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { type Component, safeTerminalText, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import * as Diff from "diff";
 import { getLanguageFromPath, highlightCode, theme } from "../theme/theme.ts";
 
@@ -100,6 +100,7 @@ export function countDiffLines(diffText: string): DiffLineCounts {
 }
 
 function parseDiffRows(diffText: string): DiffRow[] {
+	diffText = safeTerminalText(diffText);
 	if (!diffText) return [];
 	const rows = diffText.split("\n").map((line): DiffRow => {
 		const parsed = parseDiffLine(line);
@@ -250,6 +251,7 @@ export class DiffView implements Component {
  * - Added lines: green, with inverse on changed tokens
  */
 export function renderDiff(diffText: string, _options: RenderDiffOptions = {}): string {
+	diffText = safeTerminalText(diffText);
 	const lines = diffText.split("\n");
 	const result: string[] = [];
 
