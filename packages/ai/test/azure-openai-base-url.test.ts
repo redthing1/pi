@@ -261,7 +261,7 @@ describe("azure provider stream events", () => {
 
 describe("azure-openai-responses user agent", () => {
 	it("does not identify pi by default", async () => {
-		expect((await captureClientHeaders())["User-Agent"]).toBeUndefined();
+		expect((await captureClientHeaders())["User-Agent"]).toBeNull();
 	});
 
 	it("lets explicit headers override the default User-Agent", async () => {

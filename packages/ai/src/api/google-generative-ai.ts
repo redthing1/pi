@@ -21,7 +21,7 @@ import type {
 } from "../types.ts";
 import { formatProviderError, normalizeProviderError } from "../utils/error-body.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { providerHeadersToRecord } from "../utils/headers.ts";
+import type { ClientIdentity } from "../utils/identity.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText } from "../utils/text.ts";
 import { collapseSystemMessages, getCurrentTools, getInitialSystemMessage } from "../utils/transcript.ts";
@@ -30,6 +30,7 @@ import {
 	convertMessages,
 	convertTools,
 	getDisabledGoogleThinkingConfig,
+	googleClientHeaders,
 	isThinkingPart,
 	mapStopReason,
 	resolveGoogleFunctionCallingMode,
@@ -90,7 +91,7 @@ export const stream: StreamFunction<"google-generative-ai", GoogleOptions> = (
 			if (!apiKey) {
 				throw new Error(`No API key for provider: ${model.provider}`);
 			}
-			const client = createClient(model, apiKey, options?.headers);
+			const client = createClient(model, apiKey, options?.headers, options?.identity);
 			let params = buildParams(model, normalizedContext, options);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
@@ -285,12 +286,6 @@ export const stream: StreamFunction<"google-generative-ai", GoogleOptions> = (
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
-			// Remove internal index property used during streaming
-			for (const block of output.content) {
-				if ("index" in block) {
-					delete (block as { index?: number }).index;
-				}
-			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatProviderError(normalizeProviderError(error));
 			stream.push({ type: "error", reason: output.stopReason, error: output });
@@ -348,16 +343,14 @@ function createClient(
 	model: Model<"google-generative-ai">,
 	apiKey?: string,
 	optionsHeaders?: ProviderHeaders,
+	identity?: ClientIdentity,
 ): GoogleGenAI {
 	const httpOptions: { baseUrl?: string; apiVersion?: string; headers?: Record<string, string> } = {};
 	if (model.baseUrl) {
 		httpOptions.baseUrl = model.baseUrl;
 		httpOptions.apiVersion = ""; // baseUrl already includes version path, don't append
 	}
-	const headers = providerHeadersToRecord({ ...model.headers, ...optionsHeaders });
-	if (headers) {
-		httpOptions.headers = headers;
-	}
+	httpOptions.headers = googleClientHeaders(model, identity, optionsHeaders);
 
 	return new GoogleGenAI({
 		apiKey,

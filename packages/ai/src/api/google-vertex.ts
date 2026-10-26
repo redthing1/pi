@@ -24,7 +24,7 @@ import type {
 } from "../types.ts";
 import { formatProviderError, normalizeProviderError } from "../utils/error-body.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { providerHeadersToRecord } from "../utils/headers.ts";
+import type { ClientIdentity } from "../utils/identity.ts";
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { getSystemMessageText } from "../utils/text.ts";
@@ -34,6 +34,7 @@ import {
 	convertMessages,
 	convertTools,
 	getDisabledGoogleThinkingConfig,
+	googleClientHeaders,
 	isThinkingPart,
 	mapStopReason,
 	resolveGoogleFunctionCallingMode,
@@ -98,8 +99,15 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 			const apiKey = resolveApiKey(options);
 			// Create the client using either a Vertex API key, if provided, or ADC with project and location
 			const client = apiKey
-				? createClientWithApiKey(model, apiKey, options?.headers)
-				: createClient(model, resolveProject(options), resolveLocation(options), options?.headers, options?.env);
+				? createClientWithApiKey(model, apiKey, options?.headers, options?.identity)
+				: createClient(
+						model,
+						resolveProject(options),
+						resolveLocation(options),
+						options?.headers,
+						options?.env,
+						options?.identity,
+					);
 			let params = buildParams(model, normalizedContext, options);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
@@ -293,12 +301,6 @@ export const stream: StreamFunction<"google-vertex", GoogleVertexOptions> = (
 			stream.push({ type: "done", reason: output.stopReason, message: output });
 			stream.end();
 		} catch (error) {
-			// Remove internal index property used during streaming
-			for (const block of output.content) {
-				if ("index" in block) {
-					delete (block as { index?: number }).index;
-				}
-			}
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = formatProviderError(normalizeProviderError(error));
 			stream.push({ type: "error", reason: output.stopReason, error: output });
@@ -359,6 +361,7 @@ function createClient(
 	location: string,
 	optionsHeaders?: ProviderHeaders,
 	env?: ProviderEnv,
+	identity?: ClientIdentity,
 ): GoogleGenAI {
 	const googleAuthOptions = buildGoogleAuthOptions(env);
 	return new GoogleGenAI({
@@ -367,7 +370,7 @@ function createClient(
 		location,
 		apiVersion: API_VERSION,
 		...(googleAuthOptions ? { googleAuthOptions } : {}),
-		httpOptions: buildHttpOptions(model, optionsHeaders),
+		httpOptions: buildHttpOptions(model, optionsHeaders, identity),
 	});
 }
 
@@ -375,16 +378,21 @@ function createClientWithApiKey(
 	model: Model<"google-vertex">,
 	apiKey: string,
 	optionsHeaders?: ProviderHeaders,
+	identity?: ClientIdentity,
 ): GoogleGenAI {
 	return new GoogleGenAI({
 		vertexai: true,
 		apiKey,
 		apiVersion: API_VERSION,
-		httpOptions: buildHttpOptions(model, optionsHeaders),
+		httpOptions: buildHttpOptions(model, optionsHeaders, identity),
 	});
 }
 
-function buildHttpOptions(model: Model<"google-vertex">, optionsHeaders?: ProviderHeaders): HttpOptions | undefined {
+function buildHttpOptions(
+	model: Model<"google-vertex">,
+	optionsHeaders?: ProviderHeaders,
+	identity?: ClientIdentity,
+): HttpOptions | undefined {
 	const httpOptions: HttpOptions = {};
 	const baseUrl = resolveCustomBaseUrl(model.baseUrl);
 	if (baseUrl) {
@@ -395,10 +403,7 @@ function buildHttpOptions(model: Model<"google-vertex">, optionsHeaders?: Provid
 		}
 	}
 
-	const headers = providerHeadersToRecord({ ...model.headers, ...optionsHeaders });
-	if (headers) {
-		httpOptions.headers = headers;
-	}
+	httpOptions.headers = googleClientHeaders(model, identity, optionsHeaders);
 
 	return Object.keys(httpOptions).length > 0 ? httpOptions : undefined;
 }

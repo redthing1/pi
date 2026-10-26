@@ -1,4 +1,5 @@
 import { type AuthType, type CredentialStore, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { radiusProvider } from "@earendil-works/pi-ai/providers/radius";
 import { describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
@@ -147,6 +148,9 @@ describe("ModelRuntime auth options", () => {
 			}),
 			modelsPath: null,
 		});
+
+		runtime.registerNativeProvider(radiusProvider({ gateway: "https://radius.example.invalid" }));
+		await runtime.refresh({ allowNetwork: false });
 
 		expect(runtime.isUsingOAuth("anthropic")).toBe(true);
 		expect(runtime.isUsingSubscription("anthropic")).toBe(true);

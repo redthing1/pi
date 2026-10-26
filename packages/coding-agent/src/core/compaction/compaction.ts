@@ -599,7 +599,6 @@ export function getSummarizationFailure(response: AssistantMessage, label: strin
 
 function createSummarizationOptions(
 	model: Model<any>,
-	maxTokens: number,
 	apiKey: string | undefined,
 	headers: Record<string, string> | undefined,
 	env: Record<string, string> | undefined,
@@ -608,7 +607,6 @@ function createSummarizationOptions(
 	sessionId: string | undefined,
 ): SimpleStreamOptions {
 	const options: SimpleStreamOptions = {
-		maxTokens,
 		signal,
 		apiKey,
 		headers,
@@ -659,7 +657,6 @@ export async function completeSummarization(
 export async function generateSummary(
 	currentMessages: AgentMessage[],
 	model: Model<any>,
-	reserveTokens: number,
 	apiKey: string | undefined,
 	headers?: Record<string, string>,
 	signal?: AbortSignal,
@@ -676,7 +673,6 @@ export async function generateSummary(
 		await generateSummaryWithUsage(
 			currentMessages,
 			model,
-			reserveTokens,
 			apiKey,
 			headers,
 			signal,
@@ -710,7 +706,6 @@ function buildSummarizationContext(promptText: string): TranscriptContext {
 export async function generateSummaryWithUsage(
 	currentMessages: AgentMessage[],
 	model: Model<any>,
-	reserveTokens: number,
 	apiKey: string | undefined,
 	headers?: Record<string, string>,
 	signal?: AbortSignal,
@@ -723,10 +718,6 @@ export async function generateSummaryWithUsage(
 	callbacks?: RetryCallbacks,
 	sessionId?: string,
 ): Promise<{ text: string; usage: Usage }> {
-	const maxTokens = Math.min(
-		Math.floor(0.8 * reserveTokens),
-		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
-	);
 	// Use update prompt if we have a previous summary, otherwise initial prompt
 	let basePrompt = previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
 	if (customInstructions) {
@@ -745,16 +736,7 @@ export async function generateSummaryWithUsage(
 	}
 	promptText += basePrompt;
 
-	const completionOptions = createSummarizationOptions(
-		model,
-		maxTokens,
-		apiKey,
-		headers,
-		env,
-		signal,
-		thinkingLevel,
-		sessionId,
-	);
+	const completionOptions = createSummarizationOptions(model, apiKey, headers, env, signal, thinkingLevel, sessionId);
 
 	const response = await completeSummarization(
 		model,
@@ -1007,7 +989,6 @@ export async function compact(
 		tokensBefore,
 		previousSummary,
 		fileOps,
-		settings,
 	} = preparation;
 
 	// Generate summaries and merge into one
@@ -1021,7 +1002,6 @@ export async function compact(
 			const historyResult = await generateSummaryWithUsage(
 				messagesToSummarize,
 				model,
-				settings.reserveTokens,
 				apiKey,
 				headers,
 				signal,
@@ -1040,7 +1020,6 @@ export async function compact(
 		const turnPrefixResult = await generateTurnPrefixSummary(
 			turnPrefixMessages,
 			model,
-			settings.reserveTokens,
 			apiKey,
 			headers,
 			env,
@@ -1050,6 +1029,7 @@ export async function compact(
 			retry,
 			callbacks,
 			sessionId,
+			customInstructions,
 		);
 		// Merge into single summary
 		summary = `${historyText}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.text}`;
@@ -1059,7 +1039,6 @@ export async function compact(
 		const result = await generateSummaryWithUsage(
 			messagesToSummarize,
 			model,
-			settings.reserveTokens,
 			apiKey,
 			headers,
 			signal,
@@ -1095,7 +1074,6 @@ export async function compact(
 async function generateTurnPrefixSummary(
 	messages: AgentMessage[],
 	model: Model<any>,
-	reserveTokens: number,
 	apiKey: string | undefined,
 	headers?: Record<string, string>,
 	env?: Record<string, string>,
@@ -1105,20 +1083,19 @@ async function generateTurnPrefixSummary(
 	retry?: RetryPolicy,
 	callbacks?: RetryCallbacks,
 	sessionId?: string,
+	customInstructions?: string,
 ): Promise<{ text: string; usage: Usage }> {
-	const maxTokens = Math.min(
-		Math.floor(0.5 * reserveTokens),
-		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
-	); // Smaller budget for turn prefix
-
 	const llmMessages = convertToLlm(messages);
 	const conversationText = serializeConversation(llmMessages);
-	const promptText = `# Conversation\n${conversationText}\n\n# Instructions\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
+	let promptText = `# Conversation\n${conversationText}\n\n# Instructions\n${TURN_PREFIX_SUMMARIZATION_PROMPT}`;
+	if (customInstructions) {
+		promptText = `${promptText}\n\nAdditional focus: ${customInstructions}`;
+	}
 
 	const response = await completeSummarization(
 		model,
 		buildSummarizationContext(promptText),
-		createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel, sessionId),
+		createSummarizationOptions(model, apiKey, headers, env, signal, thinkingLevel, sessionId),
 		streamFn,
 		retry,
 		callbacks,

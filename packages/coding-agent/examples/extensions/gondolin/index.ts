@@ -7,15 +7,14 @@
  * isolated to the VM.
  *
  * Setup:
- *   cd packages/coding-agent/examples/extensions/gondolin
- *   npm install --ignore-scripts
+ *   From the repository root: bun install --frozen-lockfile --ignore-scripts
  *
  * Usage:
  *   cd /path/to/project
  *   pi -e /path/to/pi/packages/coding-agent/examples/extensions/gondolin
  *
  * Requirements:
- *   - Node.js >= 23.6.0 for @earendil-works/gondolin
+ *   - Node.js >= 22.19.0 for @earendil-works/gondolin
  *   - QEMU installed (for example, `brew install qemu` on macOS)
  */
 

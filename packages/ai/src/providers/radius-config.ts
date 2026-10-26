@@ -1,4 +1,5 @@
 import type { Model, ThinkingLevelMap } from "../types.ts";
+import { ownedSlice } from "../utils/text.ts";
 
 export type RadiusGatewayModel = {
 	id: string;
@@ -58,7 +59,7 @@ export function getRadiusModelsFromConfig(providerId: string, config: RadiusGate
 
 function truncateHttpBody(body: string): string {
 	const trimmed = body.trim();
-	return trimmed.length > 512 ? `${trimmed.slice(0, 512)}…` : trimmed;
+	return trimmed.length > 512 ? `${ownedSlice(trimmed, 0, 512)}…` : trimmed;
 }
 
 export async function loadRadiusGatewayConfig(

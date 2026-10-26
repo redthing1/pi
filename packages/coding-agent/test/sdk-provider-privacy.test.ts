@@ -138,13 +138,14 @@ describe("createAgentSession provider privacy", () => {
 	});
 
 	it("does not send the local session identifier to OpenCode", async () => {
-		const headers = (
-			await captureProviderOptions(createModel("opencode", "https://opencode.ai/zen/v1"), {
-				sessionId: "local-session-id",
-			})
-		)?.headers;
+		const options = await captureProviderOptions(createModel("opencode", "https://opencode.ai/zen/v1"), {
+			sessionId: "local-session-id",
+		});
+		const headers = options?.headers;
 
-		expect(headers?.["x-opencode-session"]).toBeUndefined();
+		expect(headers?.["x-opencode-session"]).toEqual(expect.any(String));
+		expect(headers?.["x-opencode-session"]).toBe(options?.sessionId);
+		expect(headers?.["x-opencode-session"]).not.toBe("local-session-id");
 		expect(headers?.["x-opencode-client"]).toBeUndefined();
 	});
 

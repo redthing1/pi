@@ -154,21 +154,21 @@ describe("google-vertex api key resolution", () => {
 		await stream.result();
 
 		expect(googleGenAiMock.constructorCalls).toHaveLength(1);
-		expect(googleGenAiMock.constructorCalls[0]?.httpOptions).toBeUndefined();
+		expect(googleGenAiMock.constructorCalls[0]?.httpOptions).not.toHaveProperty("baseUrl");
 	});
 
 	it("lets explicit headers override the default User-Agent", async () => {
 		const stream = streamGoogleVertex(model, context, {
 			project: "test-project",
 			location: "us-central1",
-			headers: { "User-Agent": "custom-agent" },
+			headers: { "User-Agent": "custom-agent", "x-goog-api-client": "" },
 		});
 
 		await stream.result();
 
 		expect(googleGenAiMock.constructorCalls).toHaveLength(1);
 		expect(googleGenAiMock.constructorCalls[0]?.httpOptions).toEqual({
-			headers: { "User-Agent": "custom-agent" },
+			headers: { "User-Agent": "custom-agent", "x-goog-api-client": "" },
 		});
 	});
 

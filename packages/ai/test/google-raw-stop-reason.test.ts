@@ -248,7 +248,7 @@ describe("Google provider stream events", () => {
 
 describe("Google Generative AI user agent", () => {
 	it("does not identify pi by default", async () => {
-		expect((await captureGoogleHeaders())["User-Agent"]).toBeUndefined();
+		expect(await captureGoogleHeaders()).toMatchObject({ "User-Agent": "", "x-goog-api-client": "" });
 	});
 
 	it("lets explicit headers override the default User-Agent", async () => {

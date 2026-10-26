@@ -743,7 +743,7 @@ Extra content`,
 		// Regression: extension discovery used to drop package scope/source, collapsing every
 		// autocomplete source tag to [t]. See issue #6968.
 		it("should keep package metadata for skills, prompts, and themes", async () => {
-			const packageRoot = join(agentDir, "npm", "node_modules", "metadata-pkg");
+			const packageRoot = join(tempDir, "metadata-pkg");
 			const packageSkillDir = join(packageRoot, "skills", "package-skill");
 			const packagePromptsDir = join(packageRoot, "prompts");
 			const packageThemesDir = join(packageRoot, "themes");
@@ -804,7 +804,7 @@ Extension prompt content`,
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				settingsManager: SettingsManager.inMemory({ packages: ["npm:metadata-pkg"] }),
+				settingsManager: SettingsManager.inMemory({ packages: [packageRoot] }),
 			});
 			await loader.reload();
 
@@ -819,7 +819,7 @@ Extension prompt content`,
 				themePaths: [{ path: extensionThemesDir, metadata: extensionMetadata }],
 			});
 
-			const packageSourceInfo = { source: "npm:metadata-pkg", scope: "user", origin: "package" };
+			const packageSourceInfo = { source: packageRoot, scope: "user", origin: "package" };
 			expect(loader.getSkills().skills.find((skill) => skill.name === "package-skill")?.sourceInfo).toMatchObject(
 				packageSourceInfo,
 			);

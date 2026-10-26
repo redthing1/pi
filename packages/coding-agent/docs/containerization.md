@@ -25,14 +25,6 @@ An isolated process can still affect resources you expose to it:
 - Network access may allow code or tool output to leave the environment.
 - Tool-only isolation does not constrain the host Pi process or extension tools that do not use the isolated backend.
 
-```bash
-cp -R packages/coding-agent/examples/extensions/gondolin ~/.pi/agent/extensions/gondolin
-```
-
-The copied extension must already include every dependency it needs; pi never fetches or installs extension code or dependencies.
-
-Run from the project you want mounted:
-
 Plain Docker provides the simplest whole-process container boundary.
 
 ### Build the image
@@ -157,30 +149,12 @@ OpenShell inference routing can keep raw model credentials outside the sandbox. 
 
 [Gondolin](https://github.com/earendil-works/gondolin) is a local Linux micro-VM. Its example extension keeps the Pi process and file-based provider credentials on the host while routing the built-in tools and user `!` commands into the VM.
 
-Commands inside the VM inherit the host process environment. Provider keys supplied through environment variables can therefore be visible inside the VM. Do not use this pattern as a credential boundary unless you remove sensitive variables or change the extension's environment handling.
+This optional upstream example is not enabled by default and has not been verified as a supported sandbox backend for this fork. It requires Node.js 22.19 or newer and a locally installed QEMU. Its package dependency is pinned in the source workspace and hydrated through the reviewed frozen Bun lock.
 
-Gondolin requires Node.js 23.6 or newer and QEMU installed through your operating-system package manager.
+The example mounts the host working folder at `/workspace` and overrides `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls`. File changes under `/workspace` write through to the host. Other extension tools continue to run on the host.
 
-### Install the extension
+Before enabling this integration, adapt the [example](../examples/extensions/gondolin/) to the fork's execution boundary:
 
-From a Pi source checkout:
-
-```bash
-mkdir -p ~/.pi/agent/extensions
-cp -R packages/coding-agent/examples/extensions/gondolin ~/.pi/agent/extensions/gondolin
-cd ~/.pi/agent/extensions/gondolin
-npm install --ignore-scripts
-```
-
-### Start Pi
-
-Run Pi from the working folder you want mounted:
-
-```bash
-cd /path/to/working-folder
-pi -e ~/.pi/agent/extensions/gondolin
-```
-
-The extension mounts the host working folder at `/workspace` in the VM and overrides `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls`. File changes under `/workspace` write through to the host.
-
-Other extension tools still run on the host unless they explicitly delegate their operations. Review the [Gondolin example](../examples/extensions/gondolin/) before adding tools that could bypass the VM boundary.
+- Require reviewed, locally provisioned guest assets instead of automatic image acquisition.
+- Pass an explicit guest environment that excludes host credentials and private configuration. The current example forwards shell environment variables.
+- Preserve the final Bash-launch context and guards for model tools and user shell commands, with the VM's destination identity.

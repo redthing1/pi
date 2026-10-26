@@ -20,6 +20,7 @@ This private fork stays close to upstream while enforcing reproducible source bu
 - Pi packages and extensions must be already-present local paths with their runtime dependencies bundled or vendored.
 - Treat manifests and `bun.lock` as reviewed code. Pin direct external dependencies exactly and pin Git dependencies to full commit SHAs.
 - Keep Bun's seven-day dependency cooldown and exact-version policy in `bunfig.toml`.
+- Gondolin and its matching platform runner packages are exempt from the cooldown. Exact pins, lock review, and disabled lifecycle scripts still apply.
 - Do not run dependency lifecycle scripts. Do not use ad hoc package runners, remote installers, or setup scripts.
 - Add or update a dependency only for a specific reviewed reason; update `bun.lock` intentionally and inspect the complete diff.
 

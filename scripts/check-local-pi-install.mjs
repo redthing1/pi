@@ -5,14 +5,14 @@ const aiPackage = JSON.parse(readFileSync("packages/ai/package.json", "utf8"));
 const cliSource = readFileSync("packages/coding-agent/src/cli.ts", "utf8");
 
 const expectedBuildPi =
-	"cd packages/chord && bun run build && cd ../tui && bun run build && cd ../telemetry && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build";
+	"cd packages/telemetry && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build";
 const expectedInstall =
 	"bun install --frozen-lockfile --ignore-scripts && (bun run check:model-data || bun run hydrate:model-data) && bun run build:pi && bun run link:local-pi";
 
 const failures = [];
 
 if (rootPackage.scripts["build:pi"] !== expectedBuildPi) {
-	failures.push("build:pi must use packages/ai build:offline");
+	failures.push("build:pi must retain dependency order and use packages/ai build:offline");
 }
 
 if (rootPackage.scripts["install:local-pi"] !== expectedInstall) {

@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingHttpHeaders, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { stream as streamBedrock } from "../src/api/bedrock-converse-stream.ts";
 import { getModel, normalizeContext } from "../src/compat.ts";
@@ -7,6 +7,7 @@ import type { Model, ProviderResponse } from "../src/types.ts";
 const MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
 let server: Server | undefined;
+let requestHeaders: IncomingHttpHeaders | undefined;
 
 afterEach(async () => {
 	if (!server) return;
@@ -17,7 +18,8 @@ afterEach(async () => {
 });
 
 async function startBedrockResponseServer(): Promise<string> {
-	server = createServer((_req, res) => {
+	server = createServer((req, res) => {
+		requestHeaders = req.headers;
 		res.writeHead(200, {
 			"content-type": "application/vnd.amazon.eventstream",
 			"x-bifrost-provider": "bedrock",
@@ -59,5 +61,9 @@ describe("bedrock response headers", () => {
 		expect(responses[0].headers["x-amzn-requestid"]).toBe("req-123");
 		expect(responses[0].headers["x-bifrost-provider"]).toBe("bedrock");
 		expect(responses[0].headers["x-bifrost-resolved-model"]).toBe(MODEL_ID);
+		expect(requestHeaders).toBeDefined();
+		for (const name of ["user-agent", "x-amz-user-agent"]) {
+			expect(requestHeaders?.[name] ?? "").not.toMatch(/aws-sdk|os\/|lang\/|md\/|api\/|nodejs|darwin|pi\//i);
+		}
 	});
 });

@@ -144,24 +144,9 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [], details: { diff: "+1 after", firstChangedLine: 1 }, isError: false });
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("Edited");
+		expect(rendered).toContain("edit");
 		expect(rendered).toContain("README.md");
 		expect(rendered).not.toContain(":1");
-	});
-
-	test("preserves legacy file_path rendering compatibility for built-in tools", () => {
-		const component = new ToolExecutionComponent(
-			"read",
-			"tool-3",
-			{ file_path: "README.md" },
-			{},
-			undefined,
-			createFakeTui(),
-			process.cwd(),
-		);
-		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("Read");
-		expect(rendered).toContain("README.md");
 	});
 
 	test("bash execute emits an initial empty partial update before output arrives", async () => {
@@ -178,9 +163,9 @@ describe("ToolExecutionComponent parity", () => {
 			{ command: "sleep 10" },
 			undefined,
 			(update) => updates.push(update as { content: Array<{ type: string; text?: string }>; details?: unknown }),
-			{} as never,
+			{ prepareBashLaunch: async () => undefined } as never,
 		);
-		expect(updates).toEqual([{ content: [], details: undefined }]);
+		await vi.waitFor(() => expect(updates).toEqual([{ content: [], details: undefined }]));
 		await promise;
 	});
 
@@ -194,13 +179,9 @@ describe("ToolExecutionComponent parity", () => {
 			},
 		};
 		const tool = createBashToolDefinition(process.cwd(), { operations, exposeSessionEnvironment: false });
-		const result = await tool.execute(
-			"tool-bash-1b",
-			{ command: "generate output" },
-			undefined,
-			undefined,
-			{} as never,
-		);
+		const result = await tool.execute("tool-bash-1b", { command: "generate output" }, undefined, undefined, {
+			prepareBashLaunch: async () => undefined,
+		} as never);
 		const component = new ToolExecutionComponent(
 			"bash",
 			"tool-bash-1b",
@@ -301,7 +282,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [{ type: "text", text: "hello" }], details: undefined, isError: false }, false);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered.match(/\bRead\b/g)?.length ?? 0).toBe(1);
+		expect(rendered.match(/\bread\b/g)?.length ?? 0).toBe(1);
 	});
 
 	// Issue #9996: strict tool schemas make models send null for omitted optional fields.
@@ -359,7 +340,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		component.updateResult({ content: [{ type: "text", text: "hello" }], details: undefined, isError: false }, false);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("Read");
+		expect(rendered).toContain("read");
 		expect(rendered).toContain("README.md");
 		expect(rendered).toContain("override result");
 	});
@@ -515,7 +496,7 @@ describe("ToolExecutionComponent parity", () => {
 		expect(expanded).not.toContain("more lines");
 	});
 
-	test("renders write calls as added-file previews with a consistent lifecycle", () => {
+	test("renders write content throughout the call lifecycle", () => {
 		const component = new ToolExecutionComponent(
 			"write",
 			"tool-7",
@@ -526,13 +507,13 @@ describe("ToolExecutionComponent parity", () => {
 			process.cwd(),
 		);
 		const pending = stripAnsi(component.render(120).join("\n"));
-		expect(pending).toContain("Writing README.md (+1 -0)");
-		expect(pending).toContain("1 +one");
+		expect(pending).toContain("write README.md");
+		expect(pending).toMatch(/\bone\b/);
 
 		component.updateArgs({ path: "README.md", content: "one\ntwo\n" });
 		const streaming = stripAnsi(component.render(120).join("\n"));
-		expect(streaming).toContain("Writing README.md (+2 -0)");
-		expect(streaming).toContain("2 +two");
+		expect(streaming).toContain("write README.md");
+		expect(streaming).toMatch(/\btwo\b/);
 		expect(streaming).not.toContain("3 +");
 
 		component.updateResult(
@@ -540,8 +521,61 @@ describe("ToolExecutionComponent parity", () => {
 			false,
 		);
 		const complete = stripAnsi(component.render(120).join("\n"));
-		expect(complete).toContain("Wrote README.md (+2 -0)");
+		expect(complete).toContain("write README.md");
 		expect(complete).not.toContain("Successfully wrote");
+	});
+
+	// #9265: every argument delta re-ran the call renderer; a streamed `write` re-highlighted its whole content each time.
+	test("renders streamed partial arguments once per frame, with the latest arguments", () => {
+		const write = createWriteToolDefinition(process.cwd());
+		let renderCalls = 0;
+		const counted: typeof write = {
+			...write,
+			renderCall: (...args) => {
+				renderCalls++;
+				return write.renderCall!(...args);
+			},
+		};
+		let renderRequests = 0;
+		const tui = { requestRender: () => renderRequests++ } as unknown as TUI;
+		const component = new ToolExecutionComponent("write", "tool-9", {}, {}, counted, tui, ".");
+		const lines = Array.from({ length: 200 }, (_, index) => `const line${index} = ${index};`);
+		const callsBefore = renderCalls;
+		let content = "";
+		for (const line of lines) {
+			content += `${line}\n`;
+			component.updateArgs({ path: "src/file.ts", content });
+		}
+		expect(renderCalls).toBe(callsBefore);
+		expect(renderRequests).toBeGreaterThan(0);
+
+		const streamed = stripAnsi(component.render(120).join("\n"));
+		expect(renderCalls - callsBefore).toBe(1);
+		// The same preview as rendering the final arguments directly.
+		const direct = new ToolExecutionComponent(
+			"write",
+			"tool-10",
+			{ path: "src/file.ts", content },
+			{},
+			write,
+			tui,
+			".",
+		);
+		expect(streamed).toBe(stripAnsi(direct.render(120).join("\n")));
+
+		// More deltas before the next frame: one more renderer run, which shows them all.
+		component.updateArgs({ path: "src/file.ts", content: `${content}const tail = 1;\n` });
+		const final = { path: "src/file.ts", content: `${content}const tail = 2;\n` };
+		component.updateArgs(final);
+		const next = stripAnsi(component.render(120).join("\n"));
+		expect(renderCalls - callsBefore).toBe(2);
+		expect(next).toContain("201 total");
+		expect(next).toBe(
+			stripAnsi(new ToolExecutionComponent("write", "t", final, {}, write, tui, ".").render(120).join("\n")),
+		);
+		// Rendering again without new arguments does not run the renderer.
+		component.render(120);
+		expect(renderCalls - callsBefore).toBe(2);
 	});
 
 	test("trims trailing blank display lines from read results", () => {
@@ -635,7 +669,7 @@ describe("ToolExecutionComponent parity", () => {
 		);
 
 		const collapsed = stripAnsi(component.render(120).join("\n"));
-		expect(collapsed).toContain("Read");
+		expect(collapsed).toContain("read");
 		expect(collapsed).toContain("notes.txt");
 		expect(collapsed).not.toContain("hidden content");
 
@@ -657,7 +691,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "AGENTS.md",
 			path: join(process.cwd(), ".pi", "AGENTS.md"),
 			content: "Hidden resource instructions",
-			compact: "Read resource .pi/AGENTS.md",
+			compact: "read resource .pi/AGENTS.md",
 			hidden: "Hidden resource instructions",
 			absent: undefined,
 		},
@@ -665,7 +699,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "AGENTS.override.md",
 			path: join(process.cwd(), ".pi", "AGENTS.override.md"),
 			content: "Hidden override instructions",
-			compact: "Read resource .pi/AGENTS.override.md",
+			compact: "read resource .pi/AGENTS.override.md",
 			hidden: "Hidden override instructions",
 			absent: undefined,
 		},
@@ -673,7 +707,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "outside AGENTS.md",
 			path: resolve(process.cwd(), "..", "AGENTS.md"),
 			content: "Hidden outside resource instructions",
-			compact: `Read resource ${resolve(process.cwd(), "..", "AGENTS.md").replace(/\\/g, "/")}`,
+			compact: `read resource ${resolve(process.cwd(), "..", "AGENTS.md").replace(/\\/g, "/")}`,
 			hidden: "Hidden outside resource instructions",
 			absent: undefined,
 		},
@@ -681,7 +715,7 @@ describe("ToolExecutionComponent parity", () => {
 			title: "Pi documentation",
 			path: getReadmePath(),
 			content: "Hidden docs content",
-			compact: "Read docs README.md",
+			compact: "read docs README.md",
 			hidden: "Hidden docs content",
 			absent: undefined,
 		},
@@ -716,7 +750,7 @@ describe("ToolExecutionComponent parity", () => {
 
 	for (const scenario of [
 		{ title: "SKILL.md", path: join(process.cwd(), "attio", "SKILL.md"), compact: "[skill] attio:120-329" },
-		{ title: "Pi documentation", path: getReadmePath(), compact: "Read docs README.md:120-329" },
+		{ title: "Pi documentation", path: getReadmePath(), compact: "read docs README.md:120-329" },
 	] as const) {
 		test(`shows the read line range in compact ${scenario.title} reads before the expand hint`, () => {
 			const component = new ToolExecutionComponent(

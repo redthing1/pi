@@ -1,4 +1,3 @@
-import { arch, platform, release } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stream as streamAnthropic } from "../src/api/anthropic-messages.ts";
 import { ANTHROPIC_AUTH_TOKEN_ENV, ANTHROPIC_OAUTH_TOKEN_ENV } from "../src/env-api-keys.ts";
@@ -55,7 +54,7 @@ vi.mock("@anthropic-ai/sdk", () => {
 	return { default: FakeAnthropic };
 });
 
-const PI_USER_AGENT = `pi (${platform()} ${release()}; ${arch()})`;
+const PI_USER_AGENT = "pi";
 const neverAbortedSignal = new AbortController().signal;
 
 const context = normalizeContext({
@@ -203,7 +202,7 @@ describe("Anthropic-compatible user agents", () => {
 		await streamAnthropic(anthropicModel, context, { apiKey: "anthropic-key" }).result();
 
 		const headers = mockState.constructorOpts?.defaultHeaders as Record<string, string>;
-		expect(headers["User-Agent"]).toBeUndefined();
+		expect(headers["User-Agent"]).toBeNull();
 	});
 
 	it("uses the required pi User-Agent for Kimi Coding", async () => {

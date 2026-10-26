@@ -4,6 +4,44 @@
 
 ### Breaking Changes
 
+- `traceIn(options, fn, context)` takes the context last (was `traceIn(context, options, fn)`), like the rest of the API.
+
+### Added
+
+- `NativeWatchable<T>`: an in-process value that changes and can be watched (`value`, `watch(context)` returning a `NativeWatchHandle<T>`), the in-process counterpart of `Watchable<T>`.
+- `WatchHandle<T>` and `WatchEnd`, the one watch API, moved from Durable: a serialized observation with `value`, `start(listener)`, `stop()`, and `closed`. `WatchEnd` reasons are `stopped`, `cancelled`, `retired`, `ended`, `listener_error`, and `failed`.
+- `Watch<T>`, the one watch handle implementation, moved from Durable: a source creates one per watch and feeds it with `advance(value, ops, context)`, `retire(context)` (last frame `[["r", null]]`, then `retired`), `end()` or `end({ error })`, and `observeCancellation(signal)`. Frames that arrive while the listener runs (or before `start`) are delivered in one call with the newest value, their ops folded by `PendingOps` and the newest frame's context; past 10,000 pending ops after folding, the call gets one root replacement `[["r", newest]]` instead (replaces the collapse after 100 undelivered frames); termination drops the listener and every reference into the source.
+- `Watchable<T>`: a value that changes and can be watched (`value`, `watch(context)` returning a `WatchHandle<T>`), the common interface of documents, derives and other observable values.
+- `NativeWatchHandle<T>` and its implementation `NativeWatch<T>`: the same lifecycle for in-process values, with listener `(value, context)` and no ops: one call per value in order, and past 100 pending values one call with the value of the optional `replace()` or the newest value.
+- `PendingOps` and `PendingTake` in `@earendil-works/chord/delta`: the pending ops of one slow consumer, kept raw and folded while they wait (appends to one path join, a primitive set replaces earlier leaf ops on its path, `r` drops everything before it); `size` counts the pending ops after folding; `take()` empties the queue and hands over the folded ops, or `replace` past 10,000 pending ops. Received batches and op tuples are never mutated.
+- `ownedSlice(text, start, end?)` in `@earendil-works/chord/delta`: a slice of a string that does not keep the whole string alive ([#9265](https://github.com/earendil-works/pi/issues/9265))
+- `appendText(draft, key, text)` in `@earendil-works/chord/delta`: append to a string in a draft at O(text) cost, recorded as an append op without comparing the old and new strings (a plain `draft[key] += text` makes `prepare()` read the whole string, O(length) per change); `StringKeys<T>` names the keys it accepts ([#9265](https://github.com/earendil-works/pi/issues/9265))
+
+### Changed
+
+- `applyImmutable()`, `applyImmutableBatches()` and tracker revisions copy each container on a changed path with spread (or `Object.assign()` onto a null-prototype object) instead of one `Object.defineProperty()` per key, about 25 times faster per container ([#9265](https://github.com/earendil-works/pi/issues/9265))
+
+### Fixed
+
+- Fixed append ops from the delta tracker and `diffRevisions()` keeping the whole string they were cut from alive (V8 represents a slice as a view of its source), so a delta chain, a watch backlog or a replica built from appends to a growing text held one copy of the text per commit ([#9265](https://github.com/earendil-works/pi/issues/9265))
+
+## [1.4.0] - 2026-10-21
+
+### Breaking Changes
+
+- Custom `Context` implementations must provide `telemetry: TelemetrySpan`; use the no-op span `NOOP_TELEMETRY_CONTEXT` when disabled. `withTelemetry()` accepts spans, not adapters.
+
+### Added
+
+- `@earendil-works/chord/telemetry-sqlite`: portable SQLite telemetry recording with bounded settled-span queues, ten-second metric aggregates, periodic flushes, and retention cleanup.
+- `Context.telemetry` is an explicit, non-optional telemetry parent (no-op by default). `withTelemetry(telemetry, context)` derives it without changing values or cancellation; `traceIn(context, options, fn)` starts a child span and passes its derived context to the callback.
+- `@earendil-works/chord/sqlite`: portable SQLite interfaces, atomic migration runner, and schema-prefix validation, with Node (`/sqlite/node`) and Cloudflare Durable Object (`/sqlite/cloudflare`) drivers. Moved from Durable, which keeps its storage implementations and re-exports the moved public names.
+- `@earendil-works/chord/output`: `Progress` takes an optional `ProgressClock` (`now`, `setTimer`) to pace commits on, by default `Date.now` and `setTimeout`.
+
+## [1.3.0] - 2026-10-15
+
+### Breaking Changes
+
 - Terminology follows the concepts: a reference (what `get` returns) is `Ref<C>` (was `Handle<C>`), its status `RefStatus` (was `HandleStatus`); what a factory returns is `ImplementationOf<C>` (was `BehaviorOf<C>`); a resource's options are a `ResourceDeclaration` (was `ResourceSpec`); epochs are code versions: `Ctx.codeVersion`, `RootOptions.codeVersion`, `Host.codeVersion`/`previousCodeVersion`, and the `codeVersion` fields of frames and reload reports (all were `epoch`). Docs and messages say object (was record) and reference (was handle and hold); the `hold` and `release` frame types keep their names
 - A remote object's variant is named `variant` (was `kind`): factories return `{ variant: "editor", … }`, references expose `ref.variant` and `shape.variant`, and the `shape` frame carries `variant`. `variant` is reserved as a member name; `kind` no longer is
 - Links have a protocol version (`PROTOCOL_VERSION`, now 2), announced in `hello`. Peers of different versions do not talk: the side that notices closes the link with reason `protocol-version <n>`, and both sides report it through `LinkOptions.onProtocolMismatch`. Peers without a version (older Chord) are refused
@@ -24,6 +62,7 @@
 
 ### Added
 
+- `@earendil-works/chord/output`: `OutputBuffer`, which keeps a head or tail window of a stream at a cost proportional to each chunk, `Progress`, which paces commits of a changing value by their size, plus `boundOutput`, `sanitizeOutput`, `characterEnd`, `utf8ByteLength`, and the `OutputLimits`, `BoundedOutput`, `OutputSlice`, and `OutputSkip` types. Moved from `@earendil-works/pi-durable`, which now uses them from here.
 - Remote references to one object share one binding per host and key (type, normalized input identity, principal key, contract fingerprint): one hold, one stream per state member, calls over the same hold; every reference keeps its own status, observers and `release`. `HostOptions.linger` (`{ types: { [typeName]: ms }, cap }`, cap default 4) keeps a binding held and hydrated after its last reference is released, so a reference taken again meanwhile costs nothing on the link
 - Holds from clients carry an opaque `origin`: the id the accepting host gave the client connection, forwarded by relays and honored only from the parent link, so a host can tell client connections apart; a disconnect releases that client's holds at once
 - Flow control by units: the first unit of a new reference passes the window, so a `get` never waits behind other references' state; units for reloads and re-holds wait, built lazily from the current values; waiting ops are capped per link (`LinkOptions.pendingCap`, default four windows), beyond which the oldest streams become resets (a relay asks downstream with `resync`)
@@ -33,6 +72,7 @@
 - `maxCalls` in `AcceptOptions` limits the calls a peer may have in progress on a link; further ones are answered at once with `unavailable` (reason `too_many_calls`) and the link stays open
 - `FacetApi.signal` aborts once that run of the facet is no longer installed: a committed reload replaced or removed it, the reload that loaded it aborted, or the host closed. While a reload prepares, the installed and the candidate run are both live
 - `HostOptions.taskStopDeadline` (default 5000 ms) bounds how long a reload waits for aborted tasks before it starts their replacements
+- Links deflate call arguments, results and state snapshots whose JSON exceeds `PACK_THRESHOLD` (64K characters): over IPC as a base64 field, over WebSockets as a binary message. Relaying hosts forward the deflated bytes unread; the host that uses the payload inflates it. `webSocketLink(socket, { compress, acceptPacked })` (`WebSocketLinkOptions`) controls sending and accepting packed frames (servers should refuse them from untrusted clients), and `inflateMessage` turns a packed WebSocket message back into a text frame
 
 ### Changed
 
@@ -53,6 +93,8 @@
 - IPC links and the host manager's control channel wrote to a peer process that had exited without a callback, so the `EPIPE` Node reports for a write in the gap between the exit and `disconnect` (an `ack` sent just after a worker shut down) became an unhandled `error` event that crashed the process. The link now ends on a failed write (reason `ipc send failed: EPIPE`), and control messages to a gone peer are dropped
 - A relayed call ran under the origin's cancel signal only, so a forced retirement of the relaying host could not cancel it before closing the old code's resources; it now follows its root's signal
 - A resource kept across a reload closed with the `close` of the factory run that first opened it, and kept that run's code reachable; it now adopts the newest declaration at commit
+- `forkDriver` passed its own `CHORD2_LOCK` to forked children, so a child host that forked its own children made those without a lock of their own fail with `locked`
+- A call through a remote reference accepted a ctx from another host, or an object not made by Chord, and carried its root over the link; it now rejects it with `invalid/foreign_ctx` like a local reference ([#10959](https://github.com/earendil-works/pi/issues/10959))
 
 ## [1.2.0] - 2026-10-12
 
