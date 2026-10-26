@@ -732,7 +732,9 @@ export function renderImage(
  * @param url - The URL to link to
  */
 export function hyperlink(text: string, url: string): string {
-	return `\x1b]8;;${url}\x1b\\${text}\x1b]8;;\x1b\\`;
+	// Link text may contain trusted styling; URL controls must not escape OSC framing.
+	const safeUrl = url.replace(/[\x00-\x20\x7f-\x9f]/g, encodeURIComponent);
+	return `\x1b]8;;${safeUrl}\x1b\\${text}\x1b]8;;\x1b\\`;
 }
 
 /** Shorten home-prefixed absolute paths to ~/... for compact display. */

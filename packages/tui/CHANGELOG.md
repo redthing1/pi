@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Escape untrusted control characters in terminal titles and hyperlink URLs, and provide shared safe text rendering helpers.
+
 ## [1.2.0] - 2026-10-12
 
 ### Breaking Changes

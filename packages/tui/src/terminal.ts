@@ -10,6 +10,7 @@ import {
 	PROGRAM_STATUS_QUERY,
 	type ProgramStatus,
 } from "./program-status.ts";
+import { safeTerminalLabel } from "./safe-text.ts";
 import { StdinBuffer } from "./stdin-buffer.ts";
 
 const TERMINAL_PROGRESS_KEEPALIVE_MS = 1000;
@@ -589,7 +590,7 @@ export class ProcessTerminal implements Terminal {
 
 	setTitle(title: string): void {
 		// OSC 0;title BEL - set terminal window title
-		process.stdout.write(`\x1b]0;${title}\x07`);
+		process.stdout.write(`\x1b]0;${safeTerminalLabel(title)}\x07`);
 	}
 
 	setProgramStatus(status: ProgramStatus): void {
