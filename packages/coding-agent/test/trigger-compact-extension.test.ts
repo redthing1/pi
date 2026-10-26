@@ -4,6 +4,7 @@ import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "..
 
 function createContext(tokens: number | null, compact = vi.fn()): ExtensionContext {
 	return {
+		refreshResources: async () => {},
 		writeOutputFile: async () => {
 			throw new Error("Unexpected output write");
 		},

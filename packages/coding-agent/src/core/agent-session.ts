@@ -233,6 +233,7 @@ export type AgentSessionEvent =
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
 	| { type: "entry_appended"; entry: SessionEntry }
 	| { type: "session_info_changed"; name: string | undefined }
+	| { type: "resources_changed" }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| {
 			type: "compaction_end";
@@ -3891,13 +3892,16 @@ export class AgentSession {
 		await this.extendResourcesFromExtensions(this._sessionStartEvent.reason === "reload" ? "reload" : "startup");
 	}
 
-	private async extendResourcesFromExtensions(reason: "startup" | "reload"): Promise<void> {
-		if (!this._extensionRunner.hasHandlers("resources_discover")) {
+	private async extendResourcesFromExtensions(reason: "startup" | "reload" | "refresh"): Promise<void> {
+		const runner = this._extensionRunner;
+		if (!runner.hasHandlers("resources_discover")) {
 			return;
 		}
 
 		const { skillPaths, skillReplacement, promptPaths, promptReplacement, themePaths } =
-			await this._extensionRunner.emitResourcesDiscover(this._cwd, reason);
+			await runner.emitResourcesDiscover(this._cwd, reason);
+		if (runner !== this._extensionRunner) return;
+		const activeTools = runner.getActiveTools();
 
 		if (
 			!skillReplacement &&
@@ -3928,7 +3932,8 @@ export class AgentSession {
 		};
 
 		this._resourceLoader.extendResources(extensionPaths);
-		this._rebuildSystemPrompt(this.getActiveToolNames());
+		this._rebuildSystemPrompt(activeTools);
+		this._emit({ type: "resources_changed" });
 	}
 
 	private buildExtensionResourcePaths(entries: Array<{ path: string; extensionPath: string }>): Array<{
@@ -4063,6 +4068,7 @@ export class AgentSession {
 				writeOutputFile: async (prefix, extension, data) =>
 					(await runner.emitOutputFile({ type: "output_file", prefix, extension, data })) ??
 					writeOutputFile(prefix, extension, data, this._temporaryOutputDirectory),
+				refreshResources: () => this.extendResourcesFromExtensions("refresh"),
 				editCompactionSummary: (entryId, summary) => this.editCompactionSummary(entryId, summary),
 				getModel: () => this.model,
 				getScopedModels: () => this._scopedModels,

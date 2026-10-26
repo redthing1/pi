@@ -354,6 +354,8 @@ export interface ExtensionContext {
 	ui: ExtensionUIContext;
 	/** Save full tool output in session-owned storage. An extension may return an opaque reference with its own reader. */
 	writeOutputFile(prefix: string, extension: string, data: string | Uint8Array): Promise<string>;
+	/** Refresh extension-provided resources for subsequent input without reloading extensions or session state. Do not call from resources_discover. */
+	refreshResources(): Promise<void>;
 	/** Current run mode. Use "tui" to guard terminal-only UI such as custom components. */
 	mode: ExtensionMode;
 	/** Whether dialog-capable UI is available (true in TUI and RPC modes) */
@@ -760,7 +762,7 @@ export type ProjectTrustHandler = (
 export interface ResourcesDiscoverEvent {
 	type: "resources_discover";
 	cwd: string;
-	reason: "startup" | "reload";
+	reason: "startup" | "reload" | "refresh";
 }
 
 /** Result from resources_discover event handler */
@@ -2324,6 +2326,7 @@ export interface ExtensionContextActions {
 	/** Command-only session operation, bound by AgentSession. */
 	editCompactionSummary?: ExtensionCommandContext["editCompactionSummary"];
 	writeOutputFile?: ExtensionContext["writeOutputFile"];
+	refreshResources?: ExtensionContext["refreshResources"];
 	getModel: () => Model<any> | undefined;
 	getScopedModels: () => readonly ScopedModel[];
 	isIdle: () => boolean;

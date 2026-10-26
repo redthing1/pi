@@ -2145,6 +2145,7 @@ export class InteractiveMode {
 
 		// Create a context for shortcut handlers
 		const createContext = (): ExtensionContext => ({
+			refreshResources: () => extensionRunner.createContext().refreshResources(),
 			writeOutputFile: (prefix, extension, data) =>
 				extensionRunner.createContext().writeOutputFile(prefix, extension, data),
 			ui: this.createExtensionUIContext(),
@@ -3363,6 +3364,11 @@ export class InteractiveMode {
 			case "session_info_changed":
 				this.updateTerminalTitle();
 				this.footer.invalidate();
+				this.ui.requestRender();
+				break;
+
+			case "resources_changed":
+				this.setupAutocompleteProvider();
 				this.ui.requestRender();
 				break;
 

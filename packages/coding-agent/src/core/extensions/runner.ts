@@ -393,6 +393,9 @@ export class ExtensionRunner {
 	private writeOutputFileFn: ExtensionContext["writeOutputFile"] = async () => {
 		throw new Error("Output storage is not bound");
 	};
+	private refreshResourcesFn: ExtensionContext["refreshResources"] = async () => {
+		throw new Error("Resource refresh is not bound");
+	};
 	private compactFn: (options?: CompactOptions) => void = () => {};
 	private editCompactionSummaryFn: ExtensionContextActions["editCompactionSummary"];
 	private getSystemPromptFn: () => string = () => "";
@@ -462,6 +465,7 @@ export class ExtensionRunner {
 
 		// Context actions (required)
 		if (contextActions.writeOutputFile) this.writeOutputFileFn = contextActions.writeOutputFile;
+		if (contextActions.refreshResources) this.refreshResourcesFn = contextActions.refreshResources;
 		this.getModel = contextActions.getModel;
 		this.getScopedModels = contextActions.getScopedModels;
 		this.isIdleFn = contextActions.isIdle;
@@ -928,6 +932,10 @@ export class ExtensionRunner {
 			writeOutputFile: (prefix, extension, data) => {
 				runner.assertActive();
 				return runner.writeOutputFileFn(prefix, extension, data);
+			},
+			refreshResources: () => {
+				runner.assertActive();
+				return runner.refreshResourcesFn();
 			},
 			get modelRegistry() {
 				runner.assertActive();

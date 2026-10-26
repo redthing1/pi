@@ -326,6 +326,8 @@ The built-in MCP support connects registered servers. When nothing does, because
 ### Context and session changes
 
 `ExtensionContext` provides the working directory, mode, UI, session manager, model runtime, abort signal, context usage, and controls for compaction and shutdown.
+
+`await ctx.refreshResources()` reruns `resources_discover` with reason `"refresh"` and updates resource catalogs and completion without reloading extensions or session state. Use authoritative replacement arrays to clear unavailable skills or prompts. This affects subsequent input; do not call it from a `resources_discover` handler.
 Use `ctx.modelRegistry.streamSimple()` for provider-neutral nested model calls. Session privacy and provider scope also apply to nested model operations.
 
 This fork supports authoritative in-memory skill and prompt-template replacement and backend-owned path resolution for remote workspaces. Use the exported declarations for the precise contracts.
