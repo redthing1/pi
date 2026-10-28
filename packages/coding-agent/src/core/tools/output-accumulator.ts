@@ -67,13 +67,15 @@ export class OutputAccumulator {
 		this.persistFullOutput = options.persistFullOutput ?? true;
 	}
 
-	append(data: Buffer): void {
+	/** Append bytes and return their newly decoded text, preserving UTF-8 boundaries. */
+	append(data: Buffer): string {
 		if (this.finished) {
 			throw new Error("Cannot append to a finished output accumulator");
 		}
 
 		this.totalRawBytes += data.length;
-		this.appendDecodedText(this.decoder.decode(data, { stream: true }));
+		const decoded = this.decoder.decode(data, { stream: true });
+		this.appendDecodedText(decoded);
 
 		if (this.persistFullOutput && (this.tempFileStream || this.shouldUseTempFile())) {
 			this.ensureTempFile();
@@ -81,17 +83,21 @@ export class OutputAccumulator {
 		} else if (this.persistFullOutput && data.length > 0) {
 			this.rawChunks.push(data);
 		}
+		return decoded;
 	}
 
-	finish(): void {
+	/** Finish decoding and return any remaining text. Repeated calls return nothing. */
+	finish(): string {
 		if (this.finished) {
-			return;
+			return "";
 		}
 		this.finished = true;
-		this.appendDecodedText(this.decoder.decode());
+		const decoded = this.decoder.decode();
+		this.appendDecodedText(decoded);
 		if (this.persistFullOutput && this.shouldUseTempFile()) {
 			this.ensureTempFile();
 		}
+		return decoded;
 	}
 
 	snapshot(options: { persistIfTruncated?: boolean } = {}): OutputSnapshot {

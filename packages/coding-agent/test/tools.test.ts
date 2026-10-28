@@ -827,6 +827,50 @@ describe("Coding Agent Tools", () => {
 			expect(getTextOutput(result)).toContain("line 4999");
 		});
 
+		it("streams decoded increments exactly once even when previews truncate", async () => {
+			const text = `ready €\n${Array.from({ length: 3000 }, (_, i) => `event ${i}\n`).join("")}final fragment`;
+			const bytes = Buffer.from(text);
+			const bash = createBashTool(testDir, {
+				operations: {
+					async exec(_command, _cwd, { onData }) {
+						for (let i = 0; i < bytes.length; i += 7) onData(bytes.subarray(i, i + 7));
+						return { exitCode: 0 };
+					},
+				},
+			});
+			const deltas: string[] = [];
+			const result = await bash.execute(
+				"stream-increments",
+				{ command: "synthetic events" },
+				undefined,
+				(update) => {
+					expect(update.details?.outputDelta).toBeTypeOf("string");
+					deltas.push(update.details!.outputDelta!);
+				},
+			);
+			expect(deltas.join("")).toBe(text);
+			expect(result.details?.truncation?.truncated).toBe(true);
+			expect(result.details?.outputDelta).toBeUndefined();
+		});
+
+		it("flushes the decoder's final fragment into streaming increments on failure", async () => {
+			const deltas: string[] = [];
+			const bash = createBashTool(testDir, {
+				operations: {
+					async exec(_command, _cwd, { onData }) {
+						onData(Buffer.from([0x61, 0xe2]));
+						throw new Error("synthetic failure");
+					},
+				},
+			});
+			await expect(
+				bash.execute("stream-failure", { command: "synthetic events" }, undefined, (update) => {
+					deltas.push(update.details?.outputDelta ?? "");
+				}),
+			).rejects.toThrow("synthetic failure");
+			expect(deltas.join("")).toBe("a�");
+		});
+
 		it("should not count a trailing newline as an extra truncated bash output line", async () => {
 			const operations: BashOperations = {
 				exec: async (_command, _cwd, { onData }) => {

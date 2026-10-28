@@ -5,6 +5,7 @@
 ### Added
 
 - Show elapsed time and the local finish time after an interactive agent run settles, including tool calls and automatic retries.
+- Streaming shell results include `outputDelta` in their details for consumers that need incremental output independently of truncated previews.
 - Exported `startToolTimer` and `toolTimerText` so extension renderers can share native tool elapsed-time displays.
 - Extension shortcuts can supply an optional `id` for remapping through `extension.<id>` in `keybindings.json`.
 - Added `pi.registerToolDecorator(name, decorate)` to adapt the selected tool definition after overrides are resolved, including later replacements.

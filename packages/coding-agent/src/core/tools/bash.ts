@@ -68,6 +68,8 @@ export type BashToolOutput = Static<typeof bashOutputSchema>;
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	/** Streaming updates only: new decoded output since the preceding update, independent of preview truncation. */
+	outputDelta?: string;
 }
 
 type ShellExecutionContext = Pick<BashLaunchEvent, "cwd" | "home" | "pathStyle">;
@@ -319,6 +321,7 @@ export function createShellToolDefinition(
 			const executionSignal = signal ? AbortSignal.any([signal, captureAbort.signal]) : captureAbort.signal;
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
+			let outputDelta = "";
 			let lastUpdateAt = 0;
 
 			const emitOutputUpdate = () => {
@@ -326,11 +329,14 @@ export function createShellToolDefinition(
 				updateDirty = false;
 				lastUpdateAt = Date.now();
 				const snapshot = output.snapshot({ persistIfTruncated: true });
+				const delta = outputDelta;
+				outputDelta = "";
 				onUpdate({
 					content: [{ type: "text", text: snapshot.content || "" }],
 					details: {
 						truncation: snapshot.truncation.truncated ? snapshot.truncation : undefined,
 						fullOutputPath: snapshot.fullOutputPath,
+						outputDelta: delta,
 					},
 				});
 			};
@@ -346,7 +352,7 @@ export function createShellToolDefinition(
 				if (!onUpdate) return;
 				updateDirty = true;
 				const delay = BASH_UPDATE_THROTTLE_MS - (Date.now() - lastUpdateAt);
-				if (delay <= 0) {
+				if (delay <= 0 || outputDelta.length >= DEFAULT_MAX_BYTES) {
 					clearUpdateTimer();
 					emitOutputUpdate();
 					return;
@@ -358,7 +364,7 @@ export function createShellToolDefinition(
 			};
 
 			if (onUpdate) {
-				onUpdate({ content: [], details: undefined });
+				onUpdate({ content: [], details: { outputDelta: "" } });
 			}
 
 			const handleData = (data: Buffer) => {
@@ -366,7 +372,8 @@ export function createShellToolDefinition(
 				const remaining = MAX_CAPTURE_BYTES - capturedBytes;
 				const captured = data.subarray(0, remaining);
 				capturedBytes += captured.length;
-				output.append(captured);
+				const decoded = output.append(captured);
+				if (onUpdate) outputDelta += decoded;
 				scheduleOutputUpdate();
 				if (data.length > remaining) {
 					captureError = "Command stopped: captured output exceeded 32 MiB. Redirect larger output to a file.";
@@ -376,7 +383,11 @@ export function createShellToolDefinition(
 
 			const finishOutput = async () => {
 				acceptingOutput = false;
-				output.finish();
+				const decoded = output.finish();
+				if (onUpdate && decoded) {
+					outputDelta += decoded;
+					updateDirty = true;
+				}
 				clearUpdateTimer();
 				emitOutputUpdate();
 				const snapshot = output.snapshot({ persistIfTruncated: true });
