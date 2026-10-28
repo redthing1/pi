@@ -458,6 +458,7 @@ export class AgentSession {
 	private _eventListeners: AgentSessionEventListener[] = [];
 	private _isAgentRunActive = false;
 	private _agentRunAbortRequested = false;
+	private _agentRunAbortReason?: string;
 	private _idleWaitPromise: Promise<void> | undefined;
 	private _resolveIdleWait: (() => void) | undefined;
 
@@ -1512,7 +1513,7 @@ export class AgentSession {
 	private _handleAgentEvent = async (event: AgentEvent): Promise<void> => {
 		// An abort requested while the run was starting, e.g. during before_agent_start, stops it
 		// here. agent_start is awaited before the first request.
-		if (event.type === "agent_start" && this._agentRunAbortRequested) this.agent.abort();
+		if (event.type === "agent_start" && this._agentRunAbortRequested) this.agent.abort(this._agentRunAbortReason);
 		// Record the calls a tool made through ctx.executeTool() and their usage on its result message.
 		if (this._nestedToolCalls) {
 			if (event.type === "message_start" && event.message.role === "toolResult") {
@@ -2300,6 +2301,7 @@ export class AgentSession {
 	): Promise<void> {
 		this._isAgentRunActive = true;
 		this._agentRunAbortRequested = false;
+		this._agentRunAbortReason = undefined;
 		let messages: AgentMessage[];
 		try {
 			messages = await this._prepareRun(trigger, skillInvocations);
@@ -2647,6 +2649,7 @@ export class AgentSession {
 
 		this._isAgentRunActive = true;
 		this._agentRunAbortRequested = false;
+		this._agentRunAbortReason = undefined;
 		await this._runAgent(() => this.agent.continue());
 	}
 
@@ -3039,16 +3042,18 @@ export class AgentSession {
 
 	/**
 	 * Abort current operation and wait for agent to become idle.
+	 * An optional reason supplies the diagnostic for cancelled tools.
 	 */
-	async abort(): Promise<void> {
-		if (this._isAgentRunActive) {
+	async abort(reason?: string): Promise<void> {
+		if (this._isAgentRunActive && !this._agentRunAbortRequested) {
 			this._agentRunAbortRequested = true;
+			this._agentRunAbortReason = reason;
 		}
 		this.abortRetry();
 		this.abortCompaction();
 		this.abortBranchSummary();
 		if (this._isBeforeSettle) this._abortDuringBeforeSettle = true;
-		this.agent.abort();
+		this.agent.abort(reason);
 		await this.waitForIdle();
 	}
 

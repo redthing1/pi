@@ -466,7 +466,7 @@ export function createShellToolDefinition(
 					const snapshot = await finishOutput();
 					if (captureError) throw failure(snapshot, captureError);
 					if (err instanceof Error && err.message === "aborted") {
-						throw failure(snapshot, "Command aborted");
+						throw failure(snapshot, typeof signal?.reason === "string" ? signal.reason : "Command aborted");
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						const timeoutSecs = err.message.split(":")[1];

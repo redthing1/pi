@@ -791,6 +791,7 @@ describe("AgentSession prompt characterization", () => {
 
 		it("aborts a run when abort is requested while before_agent_start runs", async () => {
 			let releaseHandler: () => void = () => {};
+			let abortReason: unknown;
 			const handlerStarted = Promise.withResolvers<void>();
 			const harness = await createHarness({
 				extensionFactories: [
@@ -806,19 +807,23 @@ describe("AgentSession prompt characterization", () => {
 			});
 			harnesses.push(harness);
 			harness.setResponses([fauxAssistantMessage("should not complete")]);
+			harness.session.agent.subscribe((event, signal) => {
+				if (event.type === "agent_start") abortReason = signal?.reason;
+			});
 
 			const run = harness.session.sendCustomMessage(
 				{ customType: "task-done", content: "background task finished", display: true },
 				{ triggerTurn: true },
 			);
 			await handlerStarted.promise;
-			const aborted = harness.session.abort();
+			const aborted = harness.session.abort("Interrupted by the user.");
 			releaseHandler();
 			await Promise.all([run, aborted]);
 
 			const last = harness.session.messages.at(-1);
 			expect(last?.role).toBe("assistant");
 			expect(last?.role === "assistant" && last.stopReason).toBe("aborted");
+			expect(abortReason).toBe("Interrupted by the user.");
 			expect(harness.session.isIdle).toBe(true);
 		});
 	});

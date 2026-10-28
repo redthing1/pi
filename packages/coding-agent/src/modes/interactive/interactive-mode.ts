@@ -2951,7 +2951,7 @@ export class InteractiveMode {
 				void this.session.extensionRunner.emit({ type: "ui_interrupt" });
 			}
 			if (this.session.isStreaming) {
-				this.restoreQueuedMessagesToEditor({ abort: true });
+				this.restoreQueuedMessagesToEditor({ abort: true, abortReason: "Interrupted by the user." });
 			} else if (this.session.isBashRunning) {
 				this.session.abortBash();
 			} else if (this.isBashMode) {
@@ -4565,13 +4565,17 @@ export class InteractiveMode {
 		}
 	}
 
-	private restoreQueuedMessagesToEditor(options?: { abort?: boolean; currentText?: string }): number {
+	private restoreQueuedMessagesToEditor(options?: {
+		abort?: boolean;
+		abortReason?: string;
+		currentText?: string;
+	}): number {
 		const { steering, followUp } = this.clearAllQueues();
 		const allQueued = [...steering, ...followUp];
 		if (allQueued.length === 0) {
 			this.updatePendingMessagesDisplay();
 			if (options?.abort) {
-				void this.session.abort();
+				void this.session.abort(options.abortReason);
 			}
 			return 0;
 		}
@@ -4581,7 +4585,7 @@ export class InteractiveMode {
 		this.editor.setText(combinedText);
 		this.updatePendingMessagesDisplay();
 		if (options?.abort) {
-			void this.session.abort();
+			void this.session.abort(options.abortReason);
 		}
 		return allQueued.length;
 	}

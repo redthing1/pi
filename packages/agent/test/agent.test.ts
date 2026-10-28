@@ -464,10 +464,11 @@ describe("Agent", () => {
 		expect(receivedSignal).toBeDefined();
 		expect(receivedSignal?.aborted).toBe(false);
 
-		agent.abort();
+		agent.abort("Interrupted by the user.");
 		await promptPromise;
 
 		expect(receivedSignal?.aborted).toBe(true);
+		expect(receivedSignal?.reason).toBe("Interrupted by the user.");
 	});
 
 	it("should ignore tool updates after the tool execution settles", async () => {

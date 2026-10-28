@@ -79,7 +79,10 @@ describe("InteractiveMode key handlers", () => {
 		h.session.isStreaming = true;
 		h.editor.handleInput(key);
 		expect(h.session.extensionRunner.emit).toHaveBeenCalledTimes(2);
-		expect(h.restoreQueuedMessagesToEditor).toHaveBeenCalledWith({ abort: true });
+		expect(h.restoreQueuedMessagesToEditor).toHaveBeenCalledWith({
+			abort: true,
+			abortReason: "Interrupted by the user.",
+		});
 	});
 
 	test("interrupt preserves autocomplete dismissal, shell-input exit and double-Escape navigation", () => {

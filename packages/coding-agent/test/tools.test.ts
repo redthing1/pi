@@ -603,12 +603,15 @@ describe("Coding Agent Tools", () => {
 			for (const testCase of [
 				{ error: "timeout:5", expected: "Command timed out after 5 seconds" },
 				{ error: "aborted", expected: "Command aborted" },
+				{ error: "aborted", reason: "Interrupted by the user.", expected: "Interrupted by the user." },
 			]) {
+				const controller = new AbortController();
 				const operations: BashOperations = {
 					exec: async (_command, _cwd, { onData }) => {
 						for (let i = 1; i <= 3000; i++) {
 							onData(Buffer.from(`${i}\n`, "utf-8"));
 						}
+						if (testCase.error === "aborted") controller.abort(testCase.reason);
 						throw new Error(testCase.error);
 					},
 				};
@@ -616,7 +619,7 @@ describe("Coding Agent Tools", () => {
 
 				let error: unknown;
 				try {
-					await bash.execute(`test-call-${testCase.error}`, { command: "chatty-fail" });
+					await bash.execute(`test-call-${testCase.error}`, { command: "chatty-fail" }, controller.signal);
 				} catch (err) {
 					error = err;
 				}
