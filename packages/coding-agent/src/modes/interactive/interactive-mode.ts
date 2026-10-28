@@ -105,6 +105,7 @@ import {
 import type { FullscreenExitOutput, TuiMode } from "../../core/settings-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
+import { formatToolDuration } from "../../core/tools/render-utils.ts";
 import { withBuiltInRenderers } from "../../core/tools/renderers/index.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasTrustRequiringProjectResources, ProjectTrustStore } from "../../core/trust-manager.ts";
@@ -486,6 +487,9 @@ export class InteractiveMode {
 	private streamingComponent: AssistantMessageComponent | undefined = undefined;
 	private readonly entriesRenderedByBoundaryCompaction = new Set<string>();
 	private streamingMessage: AssistantMessage | undefined = undefined;
+	private runStartedAt: number | undefined;
+	private runLastMessage: AgentMessage | undefined;
+	private readonly runSummaries = new WeakMap<AgentMessage, string>();
 
 	private toolExecutionPresenter: ToolExecutionPresenter;
 	private compactExplorationRebuildPending = false;
@@ -3282,6 +3286,7 @@ export class InteractiveMode {
 
 		switch (event.type) {
 			case "agent_start":
+				this.runStartedAt ??= performance.now();
 				this.toolExecutionPresenter.reset();
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
@@ -3420,6 +3425,7 @@ export class InteractiveMode {
 
 			case "message_end":
 				if (event.message.role === "user") break;
+				this.runLastMessage = event.message;
 				if (this.streamingComponent && event.message.role === "assistant") {
 					this.streamingMessage = event.message;
 					let errorMessage: string | undefined;
@@ -3498,6 +3504,7 @@ export class InteractiveMode {
 				break;
 
 			case "agent_settled":
+				this.finishRunSummary();
 				await this.checkShutdownRequested();
 				break;
 
@@ -3823,6 +3830,27 @@ export class InteractiveMode {
 		}
 	}
 
+	private finishRunSummary(): void {
+		const startedAt = this.runStartedAt;
+		const message = this.runLastMessage;
+		this.runStartedAt = undefined;
+		this.runLastMessage = undefined;
+		if (startedAt === undefined || !message) return;
+
+		const duration = formatToolDuration(performance.now() - startedAt);
+		const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+		const summary = `Worked for ${duration} · ${time}`;
+		// Keep presentation metadata outside the transcript and retain it across UI rebuilds.
+		this.runSummaries.set(message, summary);
+		this.addRunSummary(summary);
+		this.ui.requestRender();
+	}
+
+	private addRunSummary(summary: string): void {
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new ThemedText(() => theme.fg("dim", summary), this.outputPad, 0));
+	}
+
 	private renderSessionItems(
 		items: readonly RenderSessionItem[],
 		messageMeta?: Map<AgentMessage, { id: string; timestamp: string }>,
@@ -3903,6 +3931,8 @@ export class InteractiveMode {
 					timestamp: meta?.timestamp,
 				});
 			}
+			const summary = this.runSummaries.get(message);
+			if (summary) this.addRunSummary(summary);
 		}
 
 		this.ui.requestRender();
