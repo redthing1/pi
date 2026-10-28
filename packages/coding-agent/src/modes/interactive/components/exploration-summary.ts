@@ -15,6 +15,10 @@ export function isExplorationToolName(toolName: string): boolean {
 export function isExplorationToolSnapshot(snapshot: ToolExecutionSnapshot): boolean {
 	if (isExplorationToolName(snapshot.toolName)) return true;
 	if (snapshot.toolName !== "bash") return false;
+	const outcome = snapshot.result?.structuredContent;
+	// Custom shell outcomes are not necessarily command output.
+	if (outcome !== undefined && (typeof outcome !== "object" || outcome === null || !("exit_code" in outcome)))
+		return false;
 	if (!snapshot.argsComplete && (!snapshot.result || snapshot.isPartial)) return false;
 	return formatBashToolSummary(snapshot) !== undefined;
 }

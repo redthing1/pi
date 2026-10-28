@@ -72,7 +72,10 @@ describe("interactive tool presentation", () => {
 		expect(harness.container.children).toHaveLength(2);
 		expect(harness.container.children[1]).toBeInstanceOf(ToolExecutionComponent);
 		harness.presenter.track("bash", "b1", args, true);
-		harness.presenter.finish("b1", result("/synthetic/src/skills.ts:1:skill"));
+		harness.presenter.finish("b1", {
+			...result("/synthetic/src/skills.ts:1:skill"),
+			structuredContent: { exit_code: 0 },
+		});
 		expect(harness.container.children).toHaveLength(1);
 		const group = harness.container.children[0];
 		expect(group).toBeInstanceOf(ExplorationGroupComponent);
@@ -82,6 +85,31 @@ describe("interactive tool presentation", () => {
 		expect(rendered.match(/Explored/g)).toHaveLength(1);
 		expect(rendered).toContain("Search /skill/ in src");
 		expect(rendered).not.toContain("$ rg");
+	});
+	test.each([0, 1, 2])("keeps custom shell outcomes visible in transcript order (position %s)", (position) => {
+		const harness = createHarness();
+		for (let index = 0; index < 3; index++) {
+			if (index === position) harness.presenter.start("bash", "custom", { command: "rg needle src" });
+			else {
+				harness.presenter.start("read", String(index), { path: `file-${index}.ts` });
+				harness.presenter.finish(String(index), result(`body-${index}`));
+			}
+		}
+		expect(harness.container.children).toHaveLength(1);
+		harness.presenter.finish("custom", {
+			...result("Custom receipt"),
+			structuredContent: { status: "running", jobId: "1" },
+		});
+		const rendered = harness.render();
+		expect(rendered).toContain("Custom receipt");
+		for (let index = 0; index < 3; index++) {
+			if (index === position) continue;
+			expect(rendered.indexOf(`file-${index}.ts`)).toBeGreaterThanOrEqual(0);
+			expect(rendered.indexOf(`file-${index}.ts`) < rendered.indexOf("Custom receipt")).toBe(index < position);
+		}
+		harness.expand();
+		for (let index = 0; index < 3; index++)
+			if (index !== position) expect(harness.render()).toContain(`body-${index}`);
 	});
 	test("inserts a completed shell placeholder before the following exploration", () => {
 		const harness = createHarness();

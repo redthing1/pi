@@ -153,7 +153,16 @@ export class ToolExecutionPresenter {
 	}
 
 	private refreshGroup(component: ToolExecutionComponent): void {
-		this.findGroup(component)?.refresh();
+		const group = this.findGroup(component);
+		if (!group) return;
+		if (isExplorationToolSnapshot(component.getPresentationSnapshot())) {
+			group.refresh();
+			return;
+		}
+		const tools: ToolExecutionComponent[] = [];
+		group.forEachTool((tool) => tools.push(tool));
+		this.container.children.splice(this.container.children.indexOf(group), 1, ...tools);
+		for (const tool of tools) this.promoteIfExploration(tool);
 	}
 
 	private forEachComponent(callback: (component: ToolExecutionComponent) => void): void {

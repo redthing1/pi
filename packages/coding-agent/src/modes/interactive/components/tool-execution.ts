@@ -33,6 +33,8 @@ export interface ToolExecutionResultSnapshot {
 	content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
 	isError: boolean;
 	details?: unknown;
+	structuredContent?: unknown;
+	durationMs?: number;
 }
 
 export interface ToolExecutionSnapshot {
@@ -72,12 +74,7 @@ export class ToolExecutionComponent extends Container {
 	private argsComplete = false;
 	/** `updateArgs()` ran since the last display update; the next render applies it. */
 	private argsPending = false;
-	private result?: {
-		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-		isError: boolean;
-		details?: any;
-		durationMs?: number;
-	};
+	private result?: ToolExecutionResultSnapshot;
 	private hideComponent = false;
 
 	constructor(
@@ -208,16 +205,7 @@ export class ToolExecutionComponent extends Container {
 		this.ui.requestRender();
 	}
 
-	updateResult(
-		result: {
-			content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
-			details?: any;
-			isError: boolean;
-			/** Execution time of a final result. */
-			durationMs?: number;
-		},
-		isPartial = false,
-	): void {
+	updateResult(result: ToolExecutionResultSnapshot, isPartial = false): void {
 		this.result = result;
 		this.isPartial = isPartial;
 		this.updateDisplay();
