@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent, formatCwdForFooter } from "../src/modes/interactive/components/footer.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
 type AssistantUsage = {
@@ -126,6 +126,28 @@ describe("formatCwdForFooter", () => {
 describe("FooterComponent width handling", () => {
 	beforeAll(() => {
 		initTheme(undefined, false);
+	});
+
+	it("separates status groups without changing their colors or other footer rows", () => {
+		const data = createFooterData(1);
+		const statuses = new Map<string, string>();
+		data.getExtensionStatuses = () => statuses;
+		const footer = new FooterComponent(createSession({ sessionName: "" }), data);
+		const baseline = footer.render(160);
+		const teleport = theme.fg("accent", "teleport fixture:/workspace/測試");
+		statuses.set("teleport", teleport);
+		statuses.set("background", "2 background jobs · 1 update pending");
+		const lines = footer.render(160);
+		expect(lines.slice(0, 2)).toEqual(baseline);
+		expect(lines[2]).toContain(teleport);
+		expect(stripAnsi(lines[2])).toBe("2 background jobs · 1 update pending │ teleport fixture:/workspace/測試");
+		statuses.set("safety", "Safety: Monitor");
+		for (const width of [24, 60, 100, 160, 40, 160]) {
+			for (const line of footer.render(width)) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+		}
+		statuses.delete("background");
+		statuses.delete("safety");
+		expect(stripAnsi(footer.render(160)[2])).toBe("teleport fixture:/workspace/測試");
 	});
 
 	it("keeps all lines within width for wide session names", () => {

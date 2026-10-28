@@ -333,7 +333,7 @@ export class FooterComponent implements Component {
 			const sortedStatuses = Array.from(extensionStatuses.entries())
 				.sort(([a], [b]) => a.localeCompare(b))
 				.map(([, text]) => sanitizeStatusText(text));
-			const statusLine = sortedStatuses.join(" ");
+			const statusLine = sortedStatuses.join(theme.fg("dim", " │ "));
 			// Truncate to terminal width with dim ellipsis for consistency with footer style
 			lines.push(truncateToWidth(statusLine, width, theme.fg("dim", "...")));
 		}
