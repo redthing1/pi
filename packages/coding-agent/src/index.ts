@@ -407,7 +407,7 @@ export {
 	type WriteToolOptions,
 	withFileMutationQueue,
 } from "./core/tools/index.ts";
-export { formatReadLineRange, startToolTimer, toolTimerText } from "./core/tools/render-utils.ts";
+export { formatReadLineRange, renderShellCommand, startToolTimer, toolTimerText } from "./core/tools/render-utils.ts";
 export {
 	hasTrustRequiringProjectResources,
 	type ProjectTrustDecision,

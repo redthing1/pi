@@ -1,5 +1,12 @@
 import { join, resolve } from "node:path";
-import { resetCapabilitiesCache, setCapabilities, Text, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import {
+	resetCapabilitiesCache,
+	setCapabilities,
+	Text,
+	type TUI,
+	type TuiMouseEvent,
+	visibleWidth,
+} from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 
@@ -7,7 +14,7 @@ import { getReadmePath } from "../src/config.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
 import { type BashOperations, createBashToolDefinition } from "../src/core/tools/bash.ts";
 import { createReadTool, createReadToolDefinition } from "../src/core/tools/read.ts";
-import { withBuiltInRenderers } from "../src/core/tools/renderers/index.ts";
+import { createShellRenderers, withBuiltInRenderers } from "../src/core/tools/renderers/index.ts";
 import { createWriteToolDefinition } from "../src/core/tools/write.ts";
 import { ToolExecutionComponent } from "../src/modes/interactive/components/tool-execution.ts";
 import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
@@ -165,7 +172,7 @@ describe("ToolExecutionComponent parity", () => {
 			(update) => updates.push(update as { content: Array<{ type: string; text?: string }>; details?: unknown }),
 			{ prepareBashLaunch: async () => undefined } as never,
 		);
-		await vi.waitFor(() => expect(updates).toEqual([{ content: [], details: undefined }]));
+		await vi.waitFor(() => expect(updates).toEqual([{ content: [], details: { outputDelta: "" } }]));
 		await promise;
 	});
 
@@ -196,8 +203,7 @@ describe("ToolExecutionComponent parity", () => {
 
 		const rendered = stripAnsi(component.render(200).join("\n"));
 		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
-		expect(rendered).toMatch(/line-4000[^\n]*\n[^\S\n]*\n \[Full output:/);
-		expect(rendered).not.toMatch(/line-4000[^\n]*\n[^\S\n]*\n[^\S\n]*\n \[Full output:/);
+		expect(rendered.indexOf("Full output:")).toBeGreaterThan(rendered.indexOf("line-4000"));
 		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
 	});
@@ -268,6 +274,49 @@ describe("ToolExecutionComponent parity", () => {
 		};
 		expect(render(true)).toContain("Took 4.2s");
 		expect(render(false)).toContain("Took 4.2s");
+	});
+
+	test.each(["$", "PS>"])("%s preserves command structure and settles timeout metadata", (prompt) => {
+		vi.useFakeTimers();
+		const command = 'printf "quoted value" | sort\nprintf "second line"';
+		const row = new ToolExecutionComponent(
+			"shell",
+			"presentation",
+			{ command, timeout: 15 },
+			{ argsComplete: true },
+			createShellRenderers(prompt),
+			createFakeTui(),
+			process.cwd(),
+		);
+		row.markExecutionStarted();
+		row.updateResult({ content: [], isError: false }, true);
+		expect(stripAnsi(row.render(80).join("\n"))).toContain("timeout 15s");
+		const output = Array.from({ length: 10 }, (_, i) => `output ${i} 測試`).join("\n");
+		row.updateResult({ content: [{ type: "text", text: output }], isError: false, durationMs: 2400 });
+		for (const width of [24, 60, 100]) {
+			const lines = row.render(width);
+			expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
+			const text = stripAnsi(lines.join("\n"));
+			expect(text).toContain("Took 2.4s");
+			expect(text).not.toContain("timeout");
+			expect(text).toContain("output 9");
+			expect(text.indexOf("earlier lines")).toBeLessThan(text.indexOf("output 9"));
+		}
+		const lines = row.render(100).map(stripAnsi);
+		expect(lines.find((line) => line.includes('printf "second line"'))?.trimEnd()).toBe(
+			`${" ".repeat(prompt.length + 2)}printf "second line"`,
+		);
+		row.setExpanded(true);
+		expect(stripAnsi(row.render(100).join("\n"))).toContain(output.split("\n")[0]);
+		row.updateResult({
+			content: [{ type: "text", text: "Command timed out after 15 seconds" }],
+			isError: true,
+			durationMs: 15000,
+		});
+		const failed = stripAnsi(row.render(100).join("\n"));
+		expect(failed).toContain("✗ Failed");
+		expect(failed).toContain("Command timed out after 15 seconds");
+		expect(vi.getTimerCount()).toBe(0);
 	});
 
 	test("does not duplicate built-in headers when passed the active built-in definition", () => {

@@ -6,32 +6,26 @@
  * tool definition, so the tool's public shape is unchanged.
  */
 
-import { Container, Spacer, safeTerminalText, Text } from "@earendil-works/pi-tui";
+import { Box, Spacer, safeTerminalText, Text } from "@earendil-works/pi-tui";
 import { keyHint } from "../../../modes/interactive/components/keybinding-hints.ts";
 import { VisualLinePreview } from "../../../modes/interactive/components/visual-truncate.ts";
 import { theme } from "../../../modes/interactive/theme/theme.ts";
-import type { ToolDefinition, ToolRenderResultOptions } from "../../extensions/types.ts";
+import type { ToolRenderers, ToolRenderResultOptions } from "../../extensions/types.ts";
 import type { BashToolDetails } from "../bash.ts";
-import { getTextOutput, invalidArgText, startToolTimer, str, toolTimerText } from "../render-utils.ts";
+import {
+	getTextOutput,
+	invalidArgText,
+	renderShellCommand,
+	startToolTimer,
+	str,
+	toolTimerText,
+} from "../render-utils.ts";
 import { DEFAULT_MAX_BYTES, formatSize } from "../truncate.ts";
 
 const BASH_PREVIEW_LINES = 5;
 export const BASH_UPDATE_THROTTLE_MS = 100;
-function formatShellCall(args: { command?: string; timeout?: number } | undefined, prompt: string): string {
-	const command = str(args?.command);
-	const timeout = args?.timeout as number | undefined;
-	const timeoutSuffix = timeout
-		? theme.fg(
-				"muted",
-				` (timeout ${typeof timeout === "number" && Number.isFinite(timeout) ? timeout : invalidArgText(theme)}s)`,
-			)
-		: "";
-	const commandDisplay =
-		command === null ? invalidArgText(theme) : command ? safeTerminalText(command) : theme.fg("toolOutput", "...");
-	return theme.fg("toolTitle", theme.bold(`${prompt} ${commandDisplay}`)) + timeoutSuffix;
-}
 function rebuildBashResultRenderComponent(
-	component: Container,
+	component: Box,
 	result: {
 		content: Array<{ type: string; text?: string; data?: string; mimeType?: string }>;
 		details?: BashToolDetails;
@@ -39,6 +33,7 @@ function rebuildBashResultRenderComponent(
 	options: ToolRenderResultOptions,
 	showImages: boolean,
 	timerText: string | undefined,
+	isError: boolean,
 ): void {
 	component.clear();
 
@@ -55,21 +50,21 @@ function rebuildBashResultRenderComponent(
 	if (output) {
 		const styledOutput = output
 			.split("\n")
-			.map((line) => theme.fg("toolOutput", line))
+			.map((line) => theme.fg("text", line))
 			.join("\n");
+		const body = new Box(2, 0);
+		component.addChild(body);
 
 		if (options.expanded) {
-			component.addChild(new Text(`\n${styledOutput}`, 0, 0));
+			body.addChild(new Text(styledOutput, 0, 0));
 		} else {
-			component.addChild(new Spacer(1));
-			component.addChild(
+			body.addChild(
 				new VisualLinePreview({
 					text: styledOutput,
 					maxVisualLines: BASH_PREVIEW_LINES,
 					keep: "end",
 					formatHint: (hidden) =>
-						theme.fg("muted", `... (${hidden} earlier lines,`) +
-						` ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`,
+						theme.fg("muted", `… ${hidden} earlier lines · `) + keyHint("app.tools.expand", "to expand"),
 				}),
 			);
 		}
@@ -89,25 +84,63 @@ function rebuildBashResultRenderComponent(
 				);
 			}
 		}
-		component.addChild(new Text(`\n${theme.fg("warning", `[${warnings.join(". ")}]`)}`, 0, 0));
+		component.addChild(new Text(`\n${theme.fg("muted", warnings.join(" · "))}`, 2, 0));
 	}
 
-	if (timerText) component.addChild(new Text(`\n${theme.fg("muted", timerText)}`, 0, 0));
+	if (output && (timerText || isError)) component.addChild(new Spacer(1));
+	if (timerText || isError)
+		component.addChild(
+			new Text(
+				[isError ? theme.fg("error", "✗ Failed") : "", timerText ? theme.fg("muted", timerText) : ""]
+					.filter(Boolean)
+					.join(theme.fg("dim", " · ")),
+				2,
+				0,
+			),
+		);
+	component.addChild(new Spacer(1));
 }
 
 /** Shell renderers are shared by bash and powershell, which differ only in the prompt they display. */
-export function createShellRenderers(prompt: string): Pick<ToolDefinition<any, any>, "renderCall" | "renderResult"> {
+export function createShellRenderers(prompt: string): ToolRenderers {
 	return {
-		renderCall(args, _theme, context) {
+		renderShell: "self",
+		renderCall(rawArgs, theme, context) {
+			const args = rawArgs as { command?: unknown; timeout?: unknown } | undefined;
 			startToolTimer(context);
-			const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-			text.setText(formatShellCall(args as { command?: string; timeout?: number } | undefined, prompt));
-			return text;
+			const component = new Box(context.outputPad, 1, (line) => theme.bg("toolPendingBg", line));
+			const command = str(args?.command);
+			component.addChild(
+				command === null
+					? new Text(invalidArgText(theme), 0, 0)
+					: renderShellCommand(command || "…", prompt, theme),
+			);
+			if (context.isPartial && args?.timeout)
+				component.addChild(
+					new Text(
+						theme.fg(
+							"muted",
+							`timeout ${typeof args.timeout === "number" && Number.isFinite(args.timeout) ? args.timeout : "[invalid arg]"}s`,
+						),
+						2,
+						0,
+					),
+				);
+			return component;
 		},
 		renderResult(result, options, _theme, context) {
 			const timerText = toolTimerText(context, options.isPartial);
-			const component = (context.lastComponent as Container | undefined) ?? new Container();
-			rebuildBashResultRenderComponent(component, result as any, options, context.showImages, timerText);
+			const component =
+				(context.lastComponent as Box | undefined) ?? new Box(0, 0, (line) => theme.bg("toolPendingBg", line));
+			component.setPaddingX(context.outputPad);
+			rebuildBashResultRenderComponent(
+				component,
+				result as any,
+				options,
+				context.showImages,
+				timerText,
+				context.isError,
+			);
 			component.invalidate();
 			return component;
 		},

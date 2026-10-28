@@ -2,12 +2,16 @@ import * as os from "node:os";
 import { pathToFileURL } from "node:url";
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import {
+	type Component,
 	getCapabilities,
 	getImageDimensions,
 	hyperlink,
 	imageFallback,
 	safeTerminalLabel,
 	safeTerminalText,
+	Text,
+	truncateToWidth,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import type { Theme } from "../../modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../utils/ansi.ts";
@@ -34,6 +38,21 @@ export function str(value: unknown): string | null {
 	if (typeof value === "string") return value;
 	if (value == null) return "";
 	return null;
+}
+
+/** Keep a shell command readable, with continuations aligned after its prompt. */
+export function renderShellCommand(command: string, prompt: string, theme: Theme): Component {
+	const prefix = `${theme.fg("toolTitle", theme.bold(prompt))} `;
+	const text = new Text(theme.fg("text", safeTerminalText(command)), 0, 0);
+	return {
+		invalidate: () => text.invalidate(),
+		render(width) {
+			const indent = Math.min(visibleWidth(prefix), Math.max(0, width - 1));
+			return text
+				.render(Math.max(1, width - indent))
+				.map((line, index) => truncateToWidth(`${index === 0 ? prefix : " ".repeat(indent)}${line}`, width));
+		},
+	};
 }
 
 function parseLineNumber(value: unknown): number | undefined {
