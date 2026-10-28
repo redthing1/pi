@@ -68,8 +68,24 @@ export type BashToolOutput = Static<typeof bashOutputSchema>;
 export interface BashToolDetails {
 	truncation?: TruncationResult;
 	fullOutputPath?: string;
+	/** Non-zero exit: content contains separate output and exit-status text blocks. */
+	exitCode?: number;
 	/** Streaming updates only: new decoded output since the preceding update, independent of preview truncation. */
 	outputDelta?: string;
+}
+
+/** Preserves the thrown-error contract while exposing output and diagnostic separately. */
+export class ShellExecutionError extends Error {
+	readonly output: string;
+	readonly diagnostic: string;
+	readonly fullOutputPath?: string;
+
+	constructor(message: string, output: string, diagnostic: string, fullOutputPath?: string) {
+		super(message);
+		this.output = output;
+		this.diagnostic = diagnostic;
+		this.fullOutputPath = fullOutputPath;
+	}
 }
 
 type ShellExecutionContext = Pick<BashLaunchEvent, "cwd" | "home" | "pathStyle">;
@@ -423,6 +439,15 @@ export function createShellToolDefinition(
 
 			const appendStatus = (text: string, status: string) =>
 				text ? `${text.replace(/\r?\n$/, "")}\n\n${status}` : status;
+			const failure = (snapshot: Awaited<ReturnType<typeof finishOutput>>, diagnostic: string) => {
+				const { text, details } = formatOutput(snapshot, "");
+				return new ShellExecutionError(
+					appendStatus(text, diagnostic),
+					snapshot.content,
+					diagnostic,
+					details?.fullOutputPath,
+				);
+			};
 			const startedAt = performance.now();
 
 			try {
@@ -439,23 +464,22 @@ export function createShellToolDefinition(
 					operationFullOutputPath = result.fullOutputPath;
 				} catch (err) {
 					const snapshot = await finishOutput();
-					const { text } = formatOutput(snapshot, "");
-					if (captureError) throw new Error(appendStatus(text, captureError));
+					if (captureError) throw failure(snapshot, captureError);
 					if (err instanceof Error && err.message === "aborted") {
-						throw new Error(appendStatus(text, "Command aborted"));
+						throw failure(snapshot, "Command aborted");
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						const timeoutSecs = err.message.split(":")[1];
-						throw new Error(appendStatus(text, `Command timed out after ${timeoutSecs} seconds`));
+						throw failure(snapshot, `Command timed out after ${timeoutSecs} seconds`);
 					}
 					throw err;
 				}
 
 				const snapshot = await finishOutput();
 				const { text: outputText, details } = formatOutput(snapshot, "(no output)", operationFullOutputPath);
-				if (captureError) throw new Error(appendStatus(outputText, captureError));
+				if (captureError) throw failure(snapshot, captureError);
 				if (exitCode === null) {
-					throw new Error(appendStatus(outputText, "Command terminated without an exit code"));
+					throw failure(snapshot, "Command terminated without an exit code");
 				}
 				const wallTimeSeconds = Math.round((performance.now() - startedAt) / 100) / 10;
 				const fullOutput = await output.readFullOutput(STRUCTURED_OUTPUT_MAX_BYTES);
@@ -470,8 +494,11 @@ export function createShellToolDefinition(
 				};
 				if (exitCode !== 0) {
 					return {
-						content: [{ type: "text", text: appendStatus(outputText, `Command exited with code ${exitCode}`) }],
-						details,
+						content: [
+							{ type: "text", text: outputText },
+							{ type: "text", text: `exit ${exitCode}` },
+						],
+						details: { ...details, exitCode },
 						structuredContent,
 						isError: true,
 					};

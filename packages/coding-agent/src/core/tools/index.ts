@@ -8,6 +8,7 @@ export {
 	createBashTool,
 	createBashToolDefinition,
 	createLocalBashOperations,
+	ShellExecutionError,
 } from "./bash.ts";
 export {
 	createEditTool,

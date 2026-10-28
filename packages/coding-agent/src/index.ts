@@ -396,6 +396,7 @@ export {
 	type ReadToolDetails,
 	type ReadToolInput,
 	type ReadToolOptions,
+	ShellExecutionError,
 	type ToolsOptions,
 	type TruncationOptions,
 	type TruncationResult,

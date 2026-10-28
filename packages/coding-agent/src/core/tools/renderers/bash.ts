@@ -37,7 +37,9 @@ function rebuildBashResultRenderComponent(
 ): void {
 	component.clear();
 
-	let output = getTextOutput(result as any, showImages).trim();
+	const exitCode = result.details?.exitCode;
+	const content = exitCode ? result.content.slice(0, 1) : result.content;
+	let output = getTextOutput({ content }, showImages).trim();
 	const truncation = result.details?.truncation;
 	const fullOutputPath = result.details?.fullOutputPath;
 	if (!options.isPartial && truncation?.truncated && fullOutputPath && output.endsWith("]")) {
@@ -88,24 +90,13 @@ function rebuildBashResultRenderComponent(
 	}
 
 	const outcome = options.isPartial ? "" : isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
-	if (timerText || outcome)
-		component.addChild(
-			new Text(
-				[
-					outcome,
-					timerText
-						? theme.fg(
-								isError ? "error" : "muted",
-								timerText.replace(/^Took /, "").replace(/^Elapsed /, "elapsed "),
-							)
-						: "",
-				]
-					.filter(Boolean)
-					.join(" "),
-				2,
-				0,
-			),
-		);
+	if (timerText || outcome) {
+		const time = timerText
+			? theme.fg(isError ? "error" : "muted", timerText.replace(/^Took /, "").toLowerCase())
+			: "";
+		const exit = exitCode ? theme.fg("muted", ` · exit ${exitCode}`) : "";
+		component.addChild(new Text([outcome, time].filter(Boolean).join(" ") + exit, 2, 0));
+	}
 	component.addChild(new Spacer(1));
 }
 

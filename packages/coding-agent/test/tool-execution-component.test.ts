@@ -176,36 +176,66 @@ describe("ToolExecutionComponent parity", () => {
 		await promise;
 	});
 
-	test("bash renderer does not duplicate final full output truncation details", async () => {
-		const operations: BashOperations = {
-			exec: async (_command, _cwd, { onData }) => {
-				for (let i = 1; i <= 4000; i++) {
-					onData(Buffer.from(`line-${String(i).padStart(4, "0")}\n`));
-				}
-				return { exitCode: 0 };
+	test.each([0, 7])(
+		"bash renderer does not duplicate final full output truncation details for exit %s",
+		async (exitCode) => {
+			const operations: BashOperations = {
+				exec: async (_command, _cwd, { onData }) => {
+					for (let i = 1; i <= 4000; i++) {
+						onData(Buffer.from(`line-${String(i).padStart(4, "0")}\n`));
+					}
+					return { exitCode };
+				},
+			};
+			const tool = createBashToolDefinition(process.cwd(), { operations, exposeSessionEnvironment: false });
+			const result = await tool.execute("tool-bash-1b", { command: "generate output" }, undefined, undefined, {
+				prepareBashLaunch: async () => undefined,
+			} as never);
+			const component = new ToolExecutionComponent(
+				"bash",
+				"tool-bash-1b",
+				{ command: "generate output" },
+				{},
+				tool,
+				createFakeTui(),
+				process.cwd(),
+			);
+			component.setExpanded(true);
+			component.updateResult({ ...result, isError: exitCode !== 0 }, false);
+
+			const rendered = stripAnsi(component.render(200).join("\n"));
+			expect(rendered.match(/full output:/g)?.length ?? 0).toBe(1);
+			expect(rendered.indexOf("full output:")).toBeGreaterThan(rendered.indexOf("line-4000"));
+			expect(rendered).toContain("truncated: showing 2000 of 4000 lines");
+			expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
+			expect(rendered).not.toContain("Command exited with code");
+			if (exitCode) expect(rendered).toContain("exit 7");
+		},
+	);
+
+	test("exit metadata stays separate without removing diagnostic-like command output", async () => {
+		const output = "Command exited with code 7\n\nordinary output\n";
+		const tool = createBashToolDefinition(process.cwd(), {
+			exposeSessionEnvironment: false,
+			operations: {
+				exec: async (_command, _cwd, { onData }) => {
+					onData(Buffer.from(output));
+					return { exitCode: 7 };
+				},
 			},
-		};
-		const tool = createBashToolDefinition(process.cwd(), { operations, exposeSessionEnvironment: false });
-		const result = await tool.execute("tool-bash-1b", { command: "generate output" }, undefined, undefined, {
+		});
+		const args = { command: "synthetic failure" };
+		const result = await tool.execute("failure", args, undefined, undefined, {
 			prepareBashLaunch: async () => undefined,
 		} as never);
-		const component = new ToolExecutionComponent(
-			"bash",
-			"tool-bash-1b",
-			{ command: "generate output" },
-			{},
-			tool,
-			createFakeTui(),
-			process.cwd(),
-		);
-		component.setExpanded(true);
-		component.updateResult({ ...result, isError: false }, false);
-
-		const rendered = stripAnsi(component.render(200).join("\n"));
-		expect(rendered.match(/full output:/g)?.length ?? 0).toBe(1);
-		expect(rendered.indexOf("full output:")).toBeGreaterThan(rendered.indexOf("line-4000"));
-		expect(rendered).toContain("truncated: showing 2000 of 4000 lines");
-		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
+		const row = new ToolExecutionComponent("bash", "failure", args, {}, tool, createFakeTui(), process.cwd());
+		row.updateResult({ ...result, isError: true, durationMs: 100 });
+		const rendered = row
+			.render(100)
+			.map((line) => stripAnsi(line).trimEnd())
+			.join("\n");
+		expect(rendered.match(/Command exited with code 7/g)).toHaveLength(1);
+		expect(rendered).toContain("   Command exited with code 7\n\n   ordinary output\n   ✗ 0.1s · exit 7");
 	});
 
 	// Issue #9628: keep short durations precise and make long shell durations readable.

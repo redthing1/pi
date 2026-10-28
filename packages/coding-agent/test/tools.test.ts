@@ -10,6 +10,7 @@ import {
 	createBashTool,
 	createBashToolDefinition,
 	createLocalBashOperations,
+	ShellExecutionError,
 } from "../src/core/tools/bash.ts";
 import { createEditToolDefinition } from "../src/core/tools/edit.ts";
 import { computeEditsDiff } from "../src/core/tools/edit-diff.ts";
@@ -501,7 +502,12 @@ describe("Coding Agent Tools", () => {
 		it("should report non-zero exit codes as error results with structured content", async () => {
 			const result = await bashTool.execute("test-call-9", { command: "echo out; exit 3" });
 			expect(result.isError).toBe(true);
-			expect(getTextOutput(result)).toBe("out\n\nCommand exited with code 3");
+			expect(getTextOutput(result)).toBe("out\n\nexit 3");
+			expect(result.details).toMatchObject({ exitCode: 3 });
+			expect(result.content).toEqual([
+				{ type: "text", text: "out\n" },
+				{ type: "text", text: "exit 3" },
+			]);
 			expect(result.structuredContent).toEqual({
 				output: "out\n",
 				truncated: false,
@@ -569,9 +575,7 @@ describe("Coding Agent Tools", () => {
 						command: `printf 'before-kill\\n'; kill -${signal} $$`,
 					});
 					expect(result.isError).toBe(true);
-					expect(getTextOutput(result)).toMatch(
-						new RegExp(`before-kill\\s+Command exited with code ${exitCode}$`),
-					);
+					expect(getTextOutput(result)).toMatch(new RegExp(`before-kill\\s+exit ${exitCode}$`));
 				}
 			},
 		);
@@ -617,7 +621,9 @@ describe("Coding Agent Tools", () => {
 					error = err;
 				}
 
-				expect(error).toBeInstanceOf(Error);
+				expect(error).toBeInstanceOf(ShellExecutionError);
+				expect((error as ShellExecutionError).diagnostic).toBe(testCase.expected);
+				expect((error as ShellExecutionError).output).not.toContain(testCase.expected);
 				const message = (error as Error).message;
 				expect(message).toContain(testCase.expected);
 				expect(message).toMatch(/\[Showing lines \d+-\d+ of \d+\. Full output: /);

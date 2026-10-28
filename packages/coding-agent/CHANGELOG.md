@@ -4,6 +4,7 @@
 
 ### Added
 
+- Shell failures expose exit status separately from output; `ShellExecutionError` preserves separate diagnostics for interrupted executions.
 - Exported `renderShellCommand` for readable command headings with aligned continuation lines.
 - Added `ui_interrupt` for extensions to observe the main editor's interrupt action, including while idle.
 - Show elapsed time and the local finish time after an interactive agent run settles, including tool calls and automatic retries.
