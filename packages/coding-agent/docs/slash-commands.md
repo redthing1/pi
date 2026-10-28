@@ -28,7 +28,18 @@ Extensions, prompt templates, and skills can add commands. The command menu in P
 | `/fork` | Create a new session from an earlier user message |
 | `/clone` | Duplicate the current session at its current position |
 | `/compact [instructions]` | Compact the current context, optionally with custom instructions |
+| `/contextwindow [tokens\|reset]` | Show or override this conversation's context window |
 | `/import <path>` | Import and resume a JSONL session |
+
+`/contextwindow 128k` sets a 128,000-token budget; `1.5m` means 1,500,000.
+Suffixes are case-insensitive: `k`/`m` are decimal, `ki`/`mi` are binary.
+The session override takes precedence over `defaultContextWindow` in `models.json`,
+so you can choose a larger or smaller window than your usual default. Both are
+bounded by model capacity. Without either preference, Pi uses full capacity.
+The override follows the session branch through resume and model switches and
+applies to the next request. Existing compaction policy handles a smaller budget;
+summary requests retain full capacity to process the existing history.
+Use `/contextwindow reset` to return to the configured default.
 
 ## Export and share
 

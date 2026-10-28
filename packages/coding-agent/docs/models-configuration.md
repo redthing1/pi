@@ -52,6 +52,7 @@ Each `models` entry adds a model to the provider. An entry whose `id` matches an
 | `cost.tiers[].cacheWrite` | number |  | Required. Cache-write cost in USD per million tokens. |
 | `promptCache` | object |  | Best-effort prompt cache lifetime in seconds for the short and long retention tiers. Pi warms only tiers with a known lifetime. |
 | `contextWindow` | number | `128000` | Context window in tokens. |
+| `defaultContextWindow` | integer |  | Preferred conversation window in tokens. Session overrides may raise it up to model capacity. |
 | `maxTokens` | number | `16384` | Maximum output tokens. |
 | `samplingParams` | object |  | Fields merged into every request body. Applies only to OpenAI-compatible APIs. |
 | `samplingParamsByThinkingLevel` | object |  | samplingParams per thinking level, merged over samplingParams. |
@@ -83,6 +84,7 @@ Each `modelOverrides` key is the ID of a built-in or extension model. Unknown ID
 | `cost.tiers[].cacheWrite` | number |  | Required. Cache-write cost in USD per million tokens. |
 | `promptCache` | object |  | Best-effort prompt cache lifetime in seconds for the short and long retention tiers. Pi warms only tiers with a known lifetime. |
 | `contextWindow` | number |  | Context window in tokens. |
+| `defaultContextWindow` | integer |  | Preferred conversation window in tokens. Session overrides may raise it up to model capacity. |
 | `maxTokens` | number |  | Maximum output tokens. |
 | `samplingParams` | object |  | Fields merged into every request body. Applies only to OpenAI-compatible APIs. |
 | `samplingParamsByThinkingLevel` | object |  | samplingParams per thinking level, merged over samplingParams. |

@@ -66,6 +66,18 @@ The dummy key makes the model available to Pi; Ollama ignores it. For an authent
 
 Opening `/model` reloads the file. A `models` entry adds or replaces a model with the same ID on that provider. Use `modelOverrides` to change metadata for an existing built-in or extension-provided model without replacing the provider's model list. Unknown override IDs are ignored.
 
+To prefer a smaller conversation window while retaining the model's full capacity,
+set `defaultContextWindow` in its `modelOverrides` entry (or model definition):
+
+```json
+{ "defaultContextWindow": 491520 }
+```
+
+This preference is separate from `contextWindow`, which describes capacity. A
+session's `/contextwindow 1Mi` can raise the operating window above the default,
+up to capacity; `/contextwindow reset` restores the default. For routed models,
+the physical model's default applies. Summary requests use full capacity.
+
 To route a built-in provider through a proxy, set only its `baseUrl`. Its models and authentication stay unchanged:
 
 ```json

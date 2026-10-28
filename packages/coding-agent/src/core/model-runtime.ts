@@ -447,6 +447,15 @@ export class ModelRuntime implements Models {
 		return this.models.getModel(providerId, modelId);
 	}
 
+	/** Operator preference, separate from provider model capacity. */
+	getDefaultContextWindow(model: Pick<Model<Api>, "provider" | "id">): number | undefined {
+		const config = this.config.getProvider(model.provider);
+		return (
+			config?.modelOverrides?.[model.id]?.defaultContextWindow ??
+			config?.models?.findLast((definition) => definition.id === model.id)?.defaultContextWindow
+		);
+	}
+
 	getModelsOfType<TType extends ModelType>(type: TType, providerId?: string): readonly ModelTypeMap[TType][] {
 		return this.models.getModelsOfType(type, providerId);
 	}

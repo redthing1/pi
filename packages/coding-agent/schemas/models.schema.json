@@ -16,6 +16,10 @@
         "^.*$": {
           "type": "object",
           "properties": {
+            "zdr": {
+              "type": "boolean",
+              "description": "Explicit operator approval for zero-data-retention requests."
+            },
             "name": {
               "type": "string",
               "minLength": 1,
@@ -35,9 +39,6 @@
               "type": "string",
               "minLength": 1,
               "description": "API for the provider's models, such as \"openai-completions\", \"openai-responses\", \"anthropic-messages\", or \"google-generative-ai\"."
-            },
-            "zdr": {
-              "type": "boolean"
             },
             "oauth": {
               "type": "string",
@@ -70,6 +71,10 @@
                   "id"
                 ],
                 "properties": {
+                  "zdr": {
+                    "type": "boolean",
+                    "description": "Explicit operator approval for zero-data-retention requests."
+                  },
                   "id": {
                     "type": "string",
                     "minLength": 1,
@@ -89,9 +94,6 @@
                     "type": "string",
                     "minLength": 1,
                     "description": "Overrides the provider baseUrl."
-                  },
-                  "zdr": {
-                    "type": "boolean"
                   },
                   "reasoning": {
                     "type": "boolean",
@@ -129,6 +131,12 @@
                     "exclusiveMinimum": 0,
                     "default": 128000,
                     "description": "Context window in tokens."
+                  },
+                  "defaultContextWindow": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991,
+                    "description": "Preferred conversation window in tokens. Session overrides may raise it up to model capacity."
                   },
                   "maxTokens": {
                     "type": "number",
@@ -213,13 +221,14 @@
                 "^.*$": {
                   "type": "object",
                   "properties": {
+                    "zdr": {
+                      "type": "boolean",
+                      "description": "Explicit operator approval for zero-data-retention requests."
+                    },
                     "name": {
                       "type": "string",
                       "minLength": 1,
                       "description": "Display name, also matched by --model patterns."
-                    },
-                    "zdr": {
-                      "type": "boolean"
                     },
                     "reasoning": {
                       "type": "boolean",
@@ -306,6 +315,12 @@
                       "type": "number",
                       "exclusiveMinimum": 0,
                       "description": "Context window in tokens."
+                    },
+                    "defaultContextWindow": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991,
+                      "description": "Preferred conversation window in tokens. Session overrides may raise it up to model capacity."
                     },
                     "maxTokens": {
                       "type": "number",

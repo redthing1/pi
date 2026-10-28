@@ -42,6 +42,8 @@ const ModelFieldDescriptions = {
 	name: "Display name, also matched by --model patterns.",
 	reasoning: "Whether the model supports thinking.",
 	contextWindow: "Context window in tokens.",
+	defaultContextWindow:
+		"Preferred conversation window in tokens. Session overrides may raise it up to model capacity.",
 	maxTokens: "Maximum output tokens.",
 } as const;
 
@@ -59,6 +61,13 @@ const ModelDefinitionSchema = Type.Object({
 	promptCache: Type.Optional(ModelPromptCacheSchema),
 	contextWindow: Type.Optional(
 		Type.Number({ exclusiveMinimum: 0, default: 128000, description: ModelFieldDescriptions.contextWindow }),
+	),
+	defaultContextWindow: Type.Optional(
+		Type.Integer({
+			minimum: 1,
+			maximum: Number.MAX_SAFE_INTEGER,
+			description: ModelFieldDescriptions.defaultContextWindow,
+		}),
 	),
 	maxTokens: Type.Optional(
 		Type.Number({ exclusiveMinimum: 0, default: 16384, description: ModelFieldDescriptions.maxTokens }),
@@ -80,6 +89,13 @@ const ModelOverrideSchema = Type.Object({
 	promptCache: Type.Optional(ModelPromptCacheSchema),
 	contextWindow: Type.Optional(
 		Type.Number({ exclusiveMinimum: 0, description: ModelFieldDescriptions.contextWindow }),
+	),
+	defaultContextWindow: Type.Optional(
+		Type.Integer({
+			minimum: 1,
+			maximum: Number.MAX_SAFE_INTEGER,
+			description: ModelFieldDescriptions.defaultContextWindow,
+		}),
 	),
 	maxTokens: Type.Optional(Type.Number({ exclusiveMinimum: 0, description: ModelFieldDescriptions.maxTokens })),
 	samplingParams: Type.Optional(SamplingParamsFieldSchema),

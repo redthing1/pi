@@ -86,6 +86,12 @@ import {
 	prepareCompaction,
 	shouldCompact,
 } from "./compaction/index.ts";
+import {
+	CONTEXT_WINDOW_ENTRY,
+	type ContextWindow,
+	capContextWindow,
+	getContextWindowOverride,
+} from "./context-window.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "./defaults.ts";
 import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.ts";
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
@@ -863,6 +869,9 @@ export class AgentSession {
 	private _installAgentRequestProjection(): void {
 		const previousPrepareRequest = this.agent.prepareRequest;
 		this.agent.prepareRequest = async (request, signal) => {
+			const contextWindowOverride = getContextWindowOverride(this.sessionManager.getBranch());
+			const budgetModel = (model: Model<any>) =>
+				capContextWindow(model, this._resolveContextWindow(model, contextWindowOverride).effective || undefined);
 			const failed = this._failedResponse;
 			this._failedResponse = undefined;
 			const prepare = async () => {
@@ -887,7 +896,7 @@ export class AgentSession {
 			const { previous, context } = await prepare();
 			const model = previous?.model ?? this.agent.state.model;
 			const thinkingLevel = previous?.thinkingLevel ?? this.agent.state.thinkingLevel;
-			if (!isVirtualModel(model)) return { ...previous, context, model, thinkingLevel };
+			if (!isVirtualModel(model)) return { ...previous, context, model: budgetModel(model), thinkingLevel };
 
 			// The selection stays in agent state; only this request uses the routed model. A routing
 			// failure rejects, which ends the run with an error response. Only messages the user wrote
@@ -911,7 +920,12 @@ export class AgentSession {
 			}
 			// The route stands: the router already decided this request. The state entry does not change
 			// the projection.
-			return { ...previous, context, model: route.model, thinkingLevel: route.thinkingLevel };
+			return {
+				...previous,
+				context,
+				model: budgetModel(route.model),
+				thinkingLevel: route.thinkingLevel,
+			};
 		};
 	}
 
@@ -1148,7 +1162,8 @@ export class AgentSession {
 			if (!compactionResult) {
 				compactionResult = await this._runDefaultCompaction(
 					preparation,
-					inference.model,
+					// Summarizing existing history may require more capacity than the conversation budget.
+					this._modelRuntime.getPhysicalModel(inference.model.provider, inference.model.id) ?? inference.model,
 					undefined,
 					controller.signal,
 					"threshold",
@@ -1874,6 +1889,29 @@ export class AgentSession {
 	/** Current model (may be undefined if not yet selected) */
 	get model(): Model<any> | undefined {
 		return this.agent.state.model;
+	}
+
+	private _resolveContextWindow(model: Model<any> | undefined, override: number | undefined): ContextWindow {
+		const capacity = model?.contextWindow ?? 0;
+		const defaultWindow = model && this._modelRuntime.getDefaultContextWindow(model);
+		const requested = override ?? defaultWindow ?? capacity;
+		return { capacity, defaultWindow, override, effective: capacity > 0 ? Math.min(capacity, requested) : requested };
+	}
+
+	/** Capacity and operating window of the selected model, or latest physical route. */
+	getContextWindow(): ContextWindow {
+		return this._resolveContextWindow(this._limitsModel(), getContextWindowOverride(this.sessionManager.getBranch()));
+	}
+
+	/** Replace the configured default for this conversation, or reset to it. */
+	setContextWindow(tokens: number | undefined): void {
+		if (tokens !== undefined && (!Number.isSafeInteger(tokens) || tokens <= 0)) {
+			throw new Error("Context window must be a positive whole number of tokens.");
+		}
+		if (tokens === getContextWindowOverride(this.sessionManager.getBranch())) return;
+		const id = this.sessionManager.appendCustomEntry(CONTEXT_WINDOW_ENTRY, tokens ?? null);
+		const entry = this.sessionManager.getEntry(id);
+		if (entry) this._emit({ type: "entry_appended", entry });
 	}
 
 	/** Current thinking level */
@@ -4909,7 +4947,7 @@ export class AgentSession {
 		const model = this._limitsModel();
 		if (!model) return undefined;
 
-		const contextWindow = model.contextWindow ?? 0;
+		const contextWindow = this.getContextWindow().effective;
 		if (contextWindow <= 0) return undefined;
 
 		// After compaction, the last assistant usage reflects pre-compaction context size.

@@ -68,6 +68,7 @@ import {
 	detectCacheMiss,
 } from "../../core/cache-stats.ts";
 import { formatCacheWarmingStatus, formatCacheWarmingUsage } from "../../core/cache-warmer.ts";
+import { parseContextWindow } from "../../core/context-window.ts";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from "../../core/defaults.ts";
 import type {
 	AutocompleteProviderFactory,
@@ -3106,6 +3107,11 @@ export class InteractiveMode {
 				this.handleThinkingCommand(searchTerm);
 				return;
 			}
+			if (text === "/contextwindow" || text.startsWith("/contextwindow ")) {
+				this.editor.setText("");
+				this.handleContextWindowCommand(text.slice(14).trim());
+				return;
+			}
 			if (text === "/export" || text.startsWith("/export ")) {
 				await this.handleExportCommand(text);
 				this.editor.setText("");
@@ -4970,6 +4976,30 @@ export class InteractiveMode {
 			);
 			return { component: selector, focus: selector.getSettingsList() };
 		});
+	}
+
+	private handleContextWindowCommand(value: string): void {
+		try {
+			if (value)
+				this.session.setContextWindow(value.toLowerCase() === "reset" ? undefined : parseContextWindow(value));
+			const { capacity, defaultWindow, override, effective } = this.session.getContextWindow();
+			const format = (tokens: number) => tokens.toLocaleString("en-US");
+			const source = override !== undefined ? "session" : defaultWindow !== undefined ? "default" : "model capacity";
+			const requested = override ?? defaultWindow;
+			const detail =
+				requested !== undefined && requested > effective
+					? `${source} ${format(requested)}, limited by capacity`
+					: source;
+			this.footer.invalidate();
+			this.showStatus(
+				`context window · ${effective > 0 ? `${format(effective)} tokens` : "unknown until routed"} · ${detail}` +
+					(requested !== undefined
+						? `\ncapacity · ${capacity > 0 ? `${format(capacity)} tokens` : "unknown until routed"}`
+						: ""),
+			);
+		} catch (error) {
+			this.showError(error instanceof Error ? error.message : String(error));
+		}
 	}
 
 	private handleThinkingCommand(searchTerm?: string): void {
