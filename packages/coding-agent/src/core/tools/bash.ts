@@ -22,6 +22,8 @@ import { DEFAULT_MAX_BYTES, DEFAULT_MAX_LINES, formatSize, type TruncationResult
 const MAX_TIMEOUT_MS = 2_147_483_647;
 /** Output limit of `structuredContent.output`, which programmatic callers such as codemode scripts receive. */
 const STRUCTURED_OUTPUT_MAX_BYTES = 1024 * 1024;
+/** Bound captured output even when a command never exits. Larger results should be redirected to a file. */
+const MAX_CAPTURE_BYTES = 32 * 1024 * 1024;
 const MAX_TIMEOUT_SECONDS = MAX_TIMEOUT_MS / 1000;
 
 function resolveTimeoutMs(timeout: number | undefined): number | undefined {
@@ -267,7 +269,7 @@ export function createShellToolDefinition(
 	return {
 		name: config.name,
 		label: config.label,
-		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
+		description: `Execute a ${config.shellName} command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Commands stop after 32 MiB of captured output; redirect larger output to a file. Optionally provide a timeout in seconds.`,
 		promptSnippet: config.promptSnippet,
 		promptGuidelines: exposeSessionEnvironment && config.promptGuidelines ? [...config.promptGuidelines] : undefined,
 		parameters: bashSchema,
@@ -311,6 +313,10 @@ export function createShellToolDefinition(
 				persistFullOutput: launchOperations.managesFullOutput !== true,
 			});
 			let acceptingOutput = true;
+			let capturedBytes = 0;
+			let captureError: string | undefined;
+			const captureAbort = new AbortController();
+			const executionSignal = signal ? AbortSignal.any([signal, captureAbort.signal]) : captureAbort.signal;
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
 			let lastUpdateAt = 0;
@@ -356,9 +362,16 @@ export function createShellToolDefinition(
 			}
 
 			const handleData = (data: Buffer) => {
-				if (!acceptingOutput) return;
-				output.append(data);
+				if (!acceptingOutput || captureError) return;
+				const remaining = MAX_CAPTURE_BYTES - capturedBytes;
+				const captured = data.subarray(0, remaining);
+				capturedBytes += captured.length;
+				output.append(captured);
 				scheduleOutputUpdate();
+				if (data.length > remaining) {
+					captureError = "Command stopped: captured output exceeded 32 MiB. Redirect larger output to a file.";
+					captureAbort.abort();
+				}
 			};
 
 			const finishOutput = async () => {
@@ -406,7 +419,7 @@ export function createShellToolDefinition(
 				try {
 					const result = await launchOperations.exec(spawnContext.command, executionContext.cwd, {
 						onData: handleData,
-						signal,
+						signal: executionSignal,
 						timeout,
 						env: spawnContext.env,
 					});
@@ -415,6 +428,7 @@ export function createShellToolDefinition(
 				} catch (err) {
 					const snapshot = await finishOutput();
 					const { text } = formatOutput(snapshot, "");
+					if (captureError) throw new Error(appendStatus(text, captureError));
 					if (err instanceof Error && err.message === "aborted") {
 						throw new Error(appendStatus(text, "Command aborted"));
 					}
@@ -427,6 +441,7 @@ export function createShellToolDefinition(
 
 				const snapshot = await finishOutput();
 				const { text: outputText, details } = formatOutput(snapshot, "(no output)", operationFullOutputPath);
+				if (captureError) throw new Error(appendStatus(outputText, captureError));
 				if (exitCode === null) {
 					throw new Error(appendStatus(outputText, "Command terminated without an exit code"));
 				}
