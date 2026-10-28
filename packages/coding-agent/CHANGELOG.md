@@ -4,6 +4,7 @@
 
 ### Added
 
+- Exported `startToolTimer` and `toolTimerText` so extension renderers can share native tool elapsed-time displays.
 - Extension shortcuts can supply an optional `id` for remapping through `extension.<id>` in `keybindings.json`.
 - Added `pi.registerToolDecorator(name, decorate)` to adapt the selected tool definition after overrides are resolved, including later replacements.
 - Device-code login (for example GitHub Copilot) now opens the verification page and copies the code when you press Enter. Providers can turn either action off with `openBrowserOnConfirm: false` or `copyCodeOnConfirm: false` ([#9282](https://github.com/earendil-works/pi/issues/9282), [#9301](https://github.com/earendil-works/pi/pull/9301))
