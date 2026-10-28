@@ -1098,6 +1098,11 @@ export interface AgentSettledEvent {
 
 export type UIPromptKind = "select" | "confirm" | "input" | "editor" | "custom";
 
+/** The main editor's interrupt action, including when no agent run is active. */
+export interface UIInterruptEvent {
+	type: "ui_interrupt";
+}
+
 /** Fired when Pi starts waiting on a blocking user-facing extension UI prompt. */
 export interface UIPromptStartEvent {
 	type: "ui_prompt_start";
@@ -1511,6 +1516,7 @@ export type ExtensionEvent =
 	| AgentEndEvent
 	| AgentBeforeSettleEvent
 	| AgentSettledEvent
+	| UIInterruptEvent
 	| UIPromptStartEvent
 	| UIPromptEndEvent
 	| TurnStartEvent
@@ -1752,6 +1758,7 @@ export interface ExtensionAPI {
 		handler: ExtensionHandler<AgentBeforeSettleEvent, AgentBeforeSettleEventResult>,
 	): () => void;
 	on(event: "agent_settled", handler: ExtensionHandler<AgentSettledEvent>): () => void;
+	on(event: "ui_interrupt", handler: ExtensionHandler<UIInterruptEvent>): () => void;
 	on(event: "ui_prompt_start", handler: ExtensionHandler<UIPromptStartEvent>): () => void;
 	on(event: "ui_prompt_end", handler: ExtensionHandler<UIPromptEndEvent>): () => void;
 	on(event: "turn_start", handler: ExtensionHandler<TurnStartEvent>): () => void;

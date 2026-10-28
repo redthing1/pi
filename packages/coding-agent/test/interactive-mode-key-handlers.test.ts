@@ -1,5 +1,7 @@
 import { Editor, type Terminal, TuiMainScreen } from "@earendil-works/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
+import { KeybindingsManager } from "../src/core/keybindings.ts";
+import { CustomEditor } from "../src/modes/interactive/components/custom-editor.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { getEditorTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
 
@@ -32,6 +34,7 @@ type Harness = {
 };
 
 const privateMethods = InteractiveMode.prototype as unknown as {
+	setupKeyHandlers(): void;
 	handleCtrlC(this: Harness): void;
 	handleDequeue(this: Harness): void;
 };
@@ -39,6 +42,60 @@ const privateMethods = InteractiveMode.prototype as unknown as {
 describe("InteractiveMode key handlers", () => {
 	beforeAll(() => {
 		initTheme("dark");
+	});
+
+	function interruptHarness(remapped = false) {
+		const ui = new TuiMainScreen(new FakeTerminal());
+		const editor = new CustomEditor(
+			ui,
+			getEditorTheme(),
+			new KeybindingsManager(remapped ? { "app.interrupt": "ctrl+q" } : {}),
+		);
+		const harness = {
+			defaultEditor: editor,
+			editor,
+			ui,
+			isBashMode: false,
+			lastEscapeTime: 0,
+			session: { isStreaming: false, isBashRunning: false, extensionRunner: { emit: vi.fn() } },
+			settingsManager: { getDoubleEscapeAction: () => "tree" },
+			showTreeSelector: vi.fn(),
+			restoreQueuedMessagesToEditor: vi.fn(),
+			updateEditorBorderColor: vi.fn(),
+		};
+		Object.setPrototypeOf(harness, InteractiveMode.prototype);
+		privateMethods.setupKeyHandlers.call(harness);
+		return harness;
+	}
+
+	test.each([false, true])("interrupt reaches extensions while idle and streaming (remapped=%s)", (remapped) => {
+		const h = interruptHarness(remapped);
+		const key = remapped ? "\x11" : "\x1b";
+		h.editor.setText("unfinished draft");
+		h.editor.handleInput(key);
+		expect(h.session.extensionRunner.emit).toHaveBeenCalledWith({ type: "ui_interrupt" });
+		expect(h.editor.getText()).toBe("unfinished draft");
+		expect(h.restoreQueuedMessagesToEditor).not.toHaveBeenCalled();
+		h.session.isStreaming = true;
+		h.editor.handleInput(key);
+		expect(h.session.extensionRunner.emit).toHaveBeenCalledTimes(2);
+		expect(h.restoreQueuedMessagesToEditor).toHaveBeenCalledWith({ abort: true });
+	});
+
+	test("interrupt preserves autocomplete dismissal, shell-input exit and double-Escape navigation", () => {
+		const h = interruptHarness();
+		const autocomplete = vi.spyOn(h.editor, "isShowingAutocomplete").mockReturnValue(true);
+		h.editor.handleInput("\x1b");
+		expect(h.session.extensionRunner.emit).not.toHaveBeenCalled();
+		autocomplete.mockRestore();
+		h.editor.setText("!unfinished command");
+		h.isBashMode = true;
+		h.editor.handleInput("\x1b");
+		expect(h.session.extensionRunner.emit).not.toHaveBeenCalled();
+		expect(h.editor.getText()).toBe("");
+		h.editor.handleInput("\x1b");
+		h.editor.handleInput("\x1b");
+		expect(h.showTreeSelector).toHaveBeenCalledOnce();
 	});
 
 	test("saves a cleared Ctrl-C draft to editor history", () => {

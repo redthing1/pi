@@ -119,6 +119,7 @@ The lifecycle involves these event groups:
 | Message lifecycle | `message_start`, `message_update`, `message_end` |
 | Tool execution | `tool_execution_start`, `tool_call`, `tool_execution_update`, `tool_result`, `tool_execution_end` |
 | Settlement | `agent_before_settle`, `agent_settled` |
+| User interface | `ui_interrupt`, `ui_prompt_start`, `ui_prompt_end` |
 
 Pi counts as busy while a run starts, including the compaction check and `before_agent_start`, so messages sent meanwhile go into the starting run. Message lifecycle events also cover user and tool-result messages; the model request list places only the assistant stream where it occurs in each turn.
 
@@ -165,6 +166,8 @@ flowchart TD
 <a id="agent_start--agent_end--agent_before_settle--agent_settled"></a>
 
 Use `agent_before_settle` when an extension must append entries or request one final continuation. Use `agent_settled` for notification-only work that should run after Pi has no automatic continuation remaining.
+
+`ui_interrupt` observes the main editor's interrupt action, including while idle. It does not consume the key or replace normal interruption. Dismissing autocomplete or a focused dialog, and leaving shell-input mode, do not emit it.
 
 <a id="extensionapi-methods"></a>
 

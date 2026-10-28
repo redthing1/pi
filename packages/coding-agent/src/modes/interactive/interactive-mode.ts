@@ -2947,6 +2947,9 @@ export class InteractiveMode {
 		// Set up handlers on defaultEditor - they use this.editor for text access
 		// so they work correctly regardless of which editor is active
 		this.defaultEditor.onEscape = () => {
+			if (this.session.isStreaming || this.session.isBashRunning || !this.isBashMode) {
+				void this.session.extensionRunner.emit({ type: "ui_interrupt" });
+			}
 			if (this.session.isStreaming) {
 				this.restoreQueuedMessagesToEditor({ abort: true });
 			} else if (this.session.isBashRunning) {

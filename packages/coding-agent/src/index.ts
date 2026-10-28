@@ -198,6 +198,7 @@ export type {
 	TurnEndEvent,
 	TurnEndEventResult,
 	TurnStartEvent,
+	UIInterruptEvent,
 	UIPromptEndEvent,
 	UIPromptKind,
 	UIPromptStartEvent,
