@@ -174,6 +174,7 @@ Use `agent_before_settle` when an extension must append entries or request one f
 |---|---|
 | Observe or modify lifecycle behavior | `pi.on()` |
 | Add a model-callable operation | `pi.registerTool()` |
+| Adapt the selected tool implementation | `pi.registerToolDecorator(name, decorate)` |
 | Add a `/` command | `pi.registerCommand()` |
 | Add a shortcut or CLI flag | `pi.registerShortcut()` or `pi.registerFlag()` |
 | Send user or custom messages | `pi.sendUserMessage()` or `pi.sendMessage()` |
@@ -263,6 +264,10 @@ Declare `outputSchema` and return a matching `structuredContent` when the result
 A tool can run other tools with `ctx.executeTool(name, args, { signal, onUpdate })`. Nested calls go through argument validation and the `tool_call` and `tool_result` handlers like model-issued calls, and emit `tool_execution_start`, `tool_execution_update`, and `tool_execution_end`; all of these events carry `parentToolCallId`, and their `toolCallId` is assigned by pi as `<parent id>/<n>`. These ids do not appear as tool calls or tool results in the transcript. Nested calls do not add transcript entries: their results only reach the calling tool, which reports them itself, for example through `onUpdate` and `details`. The session keeps a bounded record of them (name, arguments, status, duration, error; never results) as `nestedCalls` on the calling tool's result message. It is used for compaction file lists and shown in HTML exports. Arguments over 8 KiB per call or 32 KiB per tool result are omitted, at most 256 calls are kept, and `complete: false` marks a record that lost anything. The `usage` of nested results, at every depth, is added to the calling tool's result `usage`, so a tool reports only its own usage, not that of the tools it called. `ctx.tools` lists the tools `ctx.executeTool()` can call. `tool_result` handlers that redact `content` should also replace `structuredContent`; replacing only `content` drops it.
 
 See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/extensions/todo.ts), [`dynamic-tools.ts`](../examples/extensions/dynamic-tools.ts), and [`truncated-tool.ts`](../examples/extensions/truncated-tool.ts).
+
+### Tool composition
+
+`pi.registerToolDecorator(name, decorate)` receives the effective definition after built-in, extension, and SDK overrides are resolved. Return a new definition with the same name; preserve fields you do not intend to change. The callback must be synchronous and must not mutate its input or register tools. Each registry refresh applies it to the undecorated definition, including when an extension replaces a tool later. Only one decorator per tool name is allowed; competing decorators are an error. Excluded tools stay excluded. The resulting schema, execution, and renderers share the same definition; ordinary tool-call and tool-result hooks still apply.
 
 ### Tool exposure
 

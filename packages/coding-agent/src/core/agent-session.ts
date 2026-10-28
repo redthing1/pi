@@ -4162,6 +4162,20 @@ export class AgentSession {
 				sourceInfo: tool.sourceInfo,
 			});
 		}
+		for (const [name, decorate] of this._extensionRunner.getToolDecorators()) {
+			const entry = definitionRegistry.get(name);
+			if (!entry) continue;
+			const definition = decorate(Object.freeze({ ...entry.definition }));
+			if (!definition || definition.name !== name) throw new Error(`Decorator for "${name}" must preserve its name`);
+			if (
+				typeof definition.parameters !== "object" ||
+				definition.parameters === null ||
+				Array.isArray(definition.parameters)
+			) {
+				throw new Error(`Decorator for "${name}" must return an object parameter schema`);
+			}
+			definitionRegistry.set(name, { ...entry, definition });
+		}
 		this._toolDefinitions = definitionRegistry;
 		this._toolPromptSnippets = new Map(
 			Array.from(definitionRegistry.values())
@@ -4180,24 +4194,9 @@ export class AgentSession {
 				.filter((entry): entry is readonly [string, string[]] => entry !== undefined),
 		);
 		const runner = this._extensionRunner;
-		const wrappedExtensionTools = wrapRegisteredTools(allCustomTools, runner);
-		const wrappedBuiltInTools = wrapRegisteredTools(
-			Array.from(this._baseToolDefinitions.values())
-				.filter((definition) => this._isAllowedTool(definition.name))
-				.map((definition) => ({
-					definition,
-					sourceInfo: createSyntheticSourceInfo(`${BUILTIN_PATH_PREFIX}${definition.name}`, {
-						source: "builtin",
-					}),
-				})),
-			runner,
+		this._toolRegistry = new Map(
+			wrapRegisteredTools([...definitionRegistry.values()], runner).map((tool) => [tool.name, tool]),
 		);
-
-		const toolRegistry = new Map(wrappedBuiltInTools.map((tool) => [tool.name, tool]));
-		for (const tool of wrappedExtensionTools as AgentTool[]) {
-			toolRegistry.set(tool.name, tool);
-		}
-		this._toolRegistry = toolRegistry;
 
 		const nextActiveToolNames = (
 			options?.activeToolNames ? [...options.activeToolNames] : [...previousActiveToolNames]
@@ -4212,8 +4211,8 @@ export class AgentSession {
 				}
 			}
 		} else if (options?.includeAllExtensionTools) {
-			for (const tool of wrappedExtensionTools) {
-				if (this._isActivatedOnRegistration(tool.name)) nextActiveToolNames.push(tool.name);
+			for (const { definition } of allCustomTools) {
+				if (this._isActivatedOnRegistration(definition.name)) nextActiveToolNames.push(definition.name);
 			}
 		} else if (!options?.activeToolNames) {
 			for (const toolName of this._toolRegistry.keys()) {

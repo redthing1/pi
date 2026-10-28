@@ -92,6 +92,7 @@ import type {
 	SessionShutdownEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
+	ToolDecorator,
 	ToolRenderers,
 	ToolResultEvent,
 	ToolResultEventResult,
@@ -678,6 +679,18 @@ export class ExtensionRunner {
 			}
 		}
 		return undefined;
+	}
+
+	/** One owner per tool; decorators never form an order-dependent wrapper chain. */
+	getToolDecorators(): Map<string, ToolDecorator> {
+		const decorators = new Map<string, ToolDecorator>();
+		for (const extension of this.extensions) {
+			for (const [name, decorate] of extension.toolDecorators ?? []) {
+				if (decorators.has(name)) throw new Error(`Multiple extensions decorate tool "${name}"`);
+				decorators.set(name, decorate);
+			}
+		}
+		return decorators;
 	}
 
 	getFlags(): Map<string, ExtensionFlag> {

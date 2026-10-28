@@ -706,6 +706,9 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 
 type AnyToolDefinition = ToolDefinition<any, any, any>;
 
+/** Pure transformation of the selected tool definition. Return a new definition with the same name. */
+export type ToolDecorator = (definition: Readonly<AnyToolDefinition>) => AnyToolDefinition;
+
 export type ToolRenderers = Pick<AnyToolDefinition, "renderShell" | "renderCall" | "renderResult">;
 
 /**
@@ -1780,6 +1783,12 @@ export interface ExtensionAPI {
 		tool: ToolDefinition<TParams, TDetails, TState>,
 	): void;
 
+	/**
+	 * Decorate a tool after built-in, extension, and SDK overrides are resolved.
+	 * Reapplied to the undecorated definition on each registry refresh. Only one decorator per name is allowed.
+	 */
+	registerToolDecorator(name: string, decorate: ToolDecorator): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -2392,6 +2401,7 @@ export interface Extension {
 	sourceInfo: SourceInfo;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
+	toolDecorators?: Map<string, ToolDecorator>;
 	messageRenderers: Map<string, MessageRenderer>;
 	toolRenderers?: ToolRendererResolver[];
 	markdownTransformer?: MarkdownTransformer;

@@ -32,6 +32,7 @@ import type {
 	MessageRenderer,
 	ProviderConfig,
 	RegisteredCommand,
+	ToolDecorator,
 	ToolDefinition,
 	ToolRendererResolver,
 } from "./types.ts";
@@ -306,6 +307,15 @@ function createExtensionAPI(
 				definition: tool,
 				sourceInfo: extension.sourceInfo,
 			});
+			runtime.refreshTools();
+		},
+
+		registerToolDecorator(name: string, decorate: ToolDecorator): void {
+			assertActive();
+			extension.toolDecorators ??= new Map();
+			if (extension.toolDecorators.has(name))
+				throw new Error(`Tool "${name}" already has a decorator in ${extension.path}`);
+			extension.toolDecorators.set(name, decorate);
 			runtime.refreshTools();
 		},
 
