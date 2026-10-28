@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- Fixed `/retry` failing with `Cannot continue from message role: assistant` after a failed or interrupted response. Manual retries now preserve history and completed tool results while omitting the failed attempt from model context.
 - Keep custom shell results visible outside compact exploration groups.
 - Fixed `pi install` and `pi remove` adding ever deeper nested entries to the npm `package-lock.json` when the agent directory is reached through a symlink, such as `~/.pi` linked into a dotfiles repo. pi now passes the resolved real path to npm ([#11358](https://github.com/earendil-works/pi/issues/11358))
 - MCP sign-in now rejects authorization endpoints and other OAuth metadata URLs that are not `http:` or `https:`. Before, a malicious MCP server could supply a `file:` or custom protocol URL, which pi passed to the platform URL handler.

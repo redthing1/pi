@@ -1,5 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
@@ -32,6 +32,132 @@ describe("AgentSession retry and event characterization", () => {
 		while (harnesses.length > 0) {
 			harnesses.pop()?.cleanup();
 		}
+	});
+
+	it.each(["error", "aborted"] as const)(
+		"manually retries a response stopped with %s without losing history or adding a user turn",
+		async (stopReason) => {
+			const harness = await createHarness({
+				settings: { retry: { enabled: false } },
+				extensionFactories: [
+					(pi) => {
+						pi.on("agent_end", () => {
+							pi.appendEntry("retry.audit", { complete: true });
+						});
+					},
+				],
+			});
+			harnesses.push(harness);
+			let request: Message[] = [];
+			harness.setResponses([
+				(context) => {
+					request = structuredClone(context.messages);
+					return fauxAssistantMessage("unfinished answer", { stopReason, errorMessage: "interrupted response" });
+				},
+			]);
+			await harness.session.prompt("synthetic task");
+			const history = harness.sessionManager.getEntries();
+			harness.setResponses([
+				(context) => {
+					expect(context.messages).toEqual(request);
+					return fauxAssistantMessage("completed answer");
+				},
+			]);
+
+			await harness.session.retry();
+
+			expect(harness.faux.state.callCount).toBe(2);
+			expect(harness.session.agent.state.errorMessage).toBeUndefined();
+			expect(harness.session.isStreaming).toBe(false);
+			expect(harness.eventsOfType("agent_settled")).toHaveLength(2);
+			expect(harness.sessionManager.getEntries().slice(0, history.length)).toEqual(history);
+			expect(
+				harness.sessionManager.buildSessionContext().messages.filter((message) => message.role === "user"),
+			).toHaveLength(1);
+			expect(
+				harness.sessionManager.buildSessionContext().messages.filter((message) => message.role === "assistant"),
+			).toEqual([
+				expect.objectContaining({ content: [{ type: "text", text: "completed answer" }], stopReason: "stop" }),
+			]);
+		},
+	);
+
+	it("manual retry preserves completed tool work and omits only the unfinished response", async () => {
+		let executions = 0;
+		const harness = await createHarness({
+			settings: { retry: { enabled: false } },
+			tools: [
+				{
+					name: "work",
+					label: "Work",
+					description: "Synthetic work",
+					parameters: Type.Object({}),
+					execute: async () => {
+						executions++;
+						return { content: [{ type: "text", text: "completed work" }], details: {} };
+					},
+				},
+			],
+		});
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage(fauxToolCall("work", {}, { id: "completed-call" }), { stopReason: "toolUse" }),
+			fauxAssistantMessage(fauxToolCall("work", {}, { id: "incomplete-call" }), {
+				stopReason: "error",
+				errorMessage: "interrupted response",
+			}),
+		]);
+		await harness.session.prompt("synthetic task");
+		harness.setResponses([
+			(context) => {
+				expect(
+					context.messages.some(
+						(message) => message.role === "toolResult" && message.toolCallId === "completed-call",
+					),
+				).toBe(true);
+				expect(JSON.stringify(context.messages)).not.toContain("incomplete-call");
+				return fauxAssistantMessage("completed answer");
+			},
+		]);
+
+		await harness.session.retry();
+
+		expect(executions).toBe(1);
+		expect(harness.faux.state.callCount).toBe(3);
+		expect(harness.session.messages.at(-1)).toMatchObject({ role: "assistant", stopReason: "stop" });
+	});
+
+	it("manual retry remains available after automatic retries are exhausted or a manual attempt fails", async () => {
+		const harness = await createHarness({ settings: { retry: { enabled: true, maxRetries: 1, baseDelayMs: 0 } } });
+		harnesses.push(harness);
+		harness.setResponses([
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded_error" }),
+			fauxAssistantMessage("", { stopReason: "error", errorMessage: "overloaded_error" }),
+		]);
+		await harness.session.prompt("synthetic task");
+		harness.settingsManager.applyOverrides({ retry: { enabled: false } });
+		harness.setResponses([fauxAssistantMessage("", { stopReason: "error", errorMessage: "still unavailable" })]);
+		await harness.session.retry();
+		harness.setResponses([fauxAssistantMessage("completed answer")]);
+		await harness.session.retry();
+
+		expect(harness.faux.state.callCount).toBe(4);
+		expect(harness.session.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+		expect(harness.session.messages.filter((message) => message.role === "user")).toHaveLength(1);
+		expect(harness.session.agent.state.errorMessage).toBeUndefined();
+	});
+
+	it("manual retry does not regenerate a successful response", async () => {
+		const harness = await createHarness();
+		harnesses.push(harness);
+		harness.setResponses([fauxAssistantMessage("completed answer")]);
+		await harness.session.prompt("synthetic task");
+		const history = harness.sessionManager.getEntries();
+
+		await expect(harness.session.retry()).rejects.toThrow("There is no failed turn to retry.");
+
+		expect(harness.faux.state.callCount).toBe(1);
+		expect(harness.sessionManager.getEntries()).toEqual(history);
 	});
 
 	it("retries after a transient error and succeeds", async () => {

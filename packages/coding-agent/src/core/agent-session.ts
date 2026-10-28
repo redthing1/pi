@@ -2640,6 +2640,11 @@ export class AgentSession {
 			throw new Error("There is no failed turn to retry.");
 		}
 
+		const failedMessage = this._findLastAssistantMessage();
+		if (failedMessage?.stopReason === "error" || failedMessage?.stopReason === "aborted") {
+			this._omitRecoveryAttempt(failedMessage);
+		}
+
 		this._isAgentRunActive = true;
 		this._agentRunAbortRequested = false;
 		await this._runAgent(() => this.agent.continue());
