@@ -269,6 +269,10 @@ See [`hello.ts`](../examples/extensions/hello.ts), [`todo.ts`](../examples/exten
 
 `pi.registerToolDecorator(name, decorate)` receives the effective definition after built-in, extension, and SDK overrides are resolved. Return a new definition with the same name; preserve fields you do not intend to change. The callback must be synchronous and must not mutate its input or register tools. Each registry refresh applies it to the undecorated definition, including when an extension replaces a tool later. Only one decorator per tool name is allowed; competing decorators are an error. Excluded tools stay excluded. The resulting schema, execution, and renderers share the same definition; ordinary tool-call and tool-result hooks still apply.
 
+### Configurable shortcuts
+
+Give `pi.registerShortcut(defaultKey, { id, handler, description })` a stable optional `id`, such as `example.run`, to allow remapping in `keybindings.json` with `"extension.example.run": "ctrl+shift+r"`. An array binds multiple keys; `[]` disables the shortcut. Existing built-in and extension conflict checks apply to the resolved keys. Omit `id` for a fixed shortcut.
+
 ### Tool exposure
 
 `exposure` controls how the model reaches a tool. "Callable" means callable from other tools through `ctx.executeTool()` (`ctx.tools`), as the `codemode` tool's scripts do:

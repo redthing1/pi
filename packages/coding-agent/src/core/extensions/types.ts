@@ -1800,6 +1800,8 @@ export interface ExtensionAPI {
 	registerShortcut(
 		shortcut: KeyId,
 		options: {
+			/** Stable ID for overrides under `extension.<id>` in keybindings.json. */
+			id?: string;
 			description?: string;
 			handler: (ctx: ExtensionContext) => Promise<void> | void;
 		},
@@ -2216,6 +2218,7 @@ export interface ExtensionFlag {
 
 export interface ExtensionShortcut {
 	shortcut: KeyId;
+	id?: string;
 	description?: string;
 	handler: (ctx: ExtensionContext) => Promise<void> | void;
 	extensionPath: string;

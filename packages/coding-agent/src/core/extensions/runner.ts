@@ -713,7 +713,10 @@ export class ExtensionRunner {
 		return new Map(this.runtime.flagValues);
 	}
 
-	getShortcuts(resolvedKeybindings: KeybindingsConfig): Map<KeyId, ExtensionShortcut> {
+	getShortcuts(
+		resolvedKeybindings: KeybindingsConfig,
+		userKeybindings: KeybindingsConfig = {},
+	): Map<KeyId, ExtensionShortcut> {
 		this.shortcutDiagnostics = [];
 		const builtinKeybindings = buildBuiltinKeybindings(resolvedKeybindings);
 		const extensionShortcuts = new Map<KeyId, ExtensionShortcut>();
@@ -726,33 +729,42 @@ export class ExtensionRunner {
 		};
 
 		for (const ext of this.extensions) {
-			for (const [key, shortcut] of ext.shortcuts) {
-				const normalizedKey = key.toLowerCase() as KeyId;
+			for (const shortcut of ext.shortcuts.values()) {
+				const configured = shortcut.id ? userKeybindings[`extension.${shortcut.id}`] : undefined;
+				const keys =
+					configured === undefined
+						? [shortcut.shortcut]
+						: typeof configured === "string"
+							? [configured]
+							: configured;
+				for (const key of keys) {
+					const normalizedKey = key.toLowerCase() as KeyId;
 
-				const builtInKeybinding = builtinKeybindings[normalizedKey];
-				if (builtInKeybinding?.restrictOverride === true) {
-					addDiagnostic(
-						`Extension shortcut '${key}' from ${shortcut.extensionPath} conflicts with built-in shortcut. Skipping.`,
-						shortcut.extensionPath,
-					);
-					continue;
-				}
+					const builtInKeybinding = builtinKeybindings[normalizedKey];
+					if (builtInKeybinding?.restrictOverride === true) {
+						addDiagnostic(
+							`Extension shortcut '${key}' from ${shortcut.extensionPath} conflicts with built-in shortcut. Skipping.`,
+							shortcut.extensionPath,
+						);
+						continue;
+					}
 
-				if (builtInKeybinding?.restrictOverride === false) {
-					addDiagnostic(
-						`Extension shortcut conflict: '${key}' is built-in shortcut for ${builtInKeybinding.keybinding} and ${shortcut.extensionPath}. Using ${shortcut.extensionPath}.`,
-						shortcut.extensionPath,
-					);
-				}
+					if (builtInKeybinding?.restrictOverride === false) {
+						addDiagnostic(
+							`Extension shortcut conflict: '${key}' is built-in shortcut for ${builtInKeybinding.keybinding} and ${shortcut.extensionPath}. Using ${shortcut.extensionPath}.`,
+							shortcut.extensionPath,
+						);
+					}
 
-				const existingExtensionShortcut = extensionShortcuts.get(normalizedKey);
-				if (existingExtensionShortcut) {
-					addDiagnostic(
-						`Extension shortcut conflict: '${key}' registered by both ${existingExtensionShortcut.extensionPath} and ${shortcut.extensionPath}. Using ${shortcut.extensionPath}.`,
-						shortcut.extensionPath,
-					);
+					const existingExtensionShortcut = extensionShortcuts.get(normalizedKey);
+					if (existingExtensionShortcut) {
+						addDiagnostic(
+							`Extension shortcut conflict: '${key}' registered by both ${existingExtensionShortcut.extensionPath} and ${shortcut.extensionPath}. Using ${shortcut.extensionPath}.`,
+							shortcut.extensionPath,
+						);
+					}
+					extensionShortcuts.set(normalizedKey, { ...shortcut, shortcut: normalizedKey });
 				}
-				extensionShortcuts.set(normalizedKey, shortcut);
 			}
 		}
 		return extensionShortcuts;

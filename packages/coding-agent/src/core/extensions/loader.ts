@@ -339,6 +339,7 @@ function createExtensionAPI(
 		registerShortcut(
 			shortcut: KeyId,
 			options: {
+				id?: string;
 				description?: string;
 				handler: (ctx: import("./types.ts").ExtensionContext) => Promise<void> | void;
 			},

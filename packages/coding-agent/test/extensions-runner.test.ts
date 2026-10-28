@@ -448,6 +448,36 @@ describe("ExtensionRunner", () => {
 	});
 
 	describe("shortcut conflicts", () => {
+		it("resolves named extension shortcuts through user keybindings", async () => {
+			const loaded = await createTestExtensionsResult(
+				[
+					{
+						path: "named-shortcut.ts",
+						factory: (pi) => {
+							pi.registerShortcut("ctrl+b", { id: "example.run", handler: async () => {} });
+						},
+					},
+				],
+				tempDir,
+			);
+			const runner = new ExtensionRunner(loaded.extensions, loaded.runtime, tempDir, sessionManager, modelRegistry);
+			expect([...runner.getShortcuts(defaultKeybindings).keys()]).toEqual(["ctrl+b"]);
+			expect(runner.getShortcutDiagnostics()).toEqual([]);
+			expect([
+				...runner.getShortcuts(defaultKeybindings, { "extension.example.run": "ctrl+shift+y" }).keys(),
+			]).toEqual(["ctrl+shift+y"]);
+			expect([
+				...runner
+					.getShortcuts(defaultKeybindings, { "extension.example.run": ["ctrl+shift+y", "ctrl+shift+z"] })
+					.keys(),
+			]).toEqual(["ctrl+shift+y", "ctrl+shift+z"]);
+			expect(runner.getShortcuts(defaultKeybindings, { "extension.example.run": [] }).size).toBe(0);
+			const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			expect(runner.getShortcuts(defaultKeybindings, { "extension.example.run": "ctrl+c" }).size).toBe(0);
+			expect(warn).toHaveBeenCalledWith(expect.stringContaining("conflicts with built-in"));
+			warn.mockRestore();
+		});
+
 		it("warns when extension shortcut conflicts with built-in", async () => {
 			const extCode = `
 				export default function(pi) {

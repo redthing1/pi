@@ -54,7 +54,7 @@ Examples: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `super+k`, `ctrl+sup
 | `tui.editor.cursorDown` | `down` | Move cursor down, browsing newer history at the bottom |
 | `tui.editor.historyPrevious` | None | Select the previous prompt history entry |
 | `tui.editor.historyNext` | None | Select the next prompt history entry |
-| `tui.editor.cursorLeft` | `left`, `ctrl+b` | Move cursor left |
+| `tui.editor.cursorLeft` | `left` | Move cursor left |
 | `tui.editor.cursorRight` | `right`, `ctrl+f` | Move cursor right |
 | `tui.editor.cursorWordLeft` | `alt+left`, `ctrl+left`, `alt+b` | Move cursor word left |
 | `tui.editor.cursorWordRight` | `alt+right`, `ctrl+right`, `alt+f` | Move cursor word right |

@@ -81,7 +81,7 @@ export const TUI_KEYBINDINGS = {
 		description: "Select next prompt history entry",
 	},
 	"tui.editor.cursorLeft": {
-		defaultKeys: ["left", "ctrl+b"],
+		defaultKeys: "left",
 		description: "Move cursor left",
 	},
 	"tui.editor.cursorRight": {
