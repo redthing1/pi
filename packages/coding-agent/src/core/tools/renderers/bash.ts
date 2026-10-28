@@ -73,27 +73,35 @@ function rebuildBashResultRenderComponent(
 	if (truncation?.truncated || fullOutputPath) {
 		const warnings: string[] = [];
 		if (fullOutputPath) {
-			warnings.push(`Full output: ${safeTerminalText(fullOutputPath)}`);
+			warnings.push(`full output: ${safeTerminalText(fullOutputPath)}`);
 		}
 		if (truncation?.truncated) {
 			if (truncation.truncatedBy === "lines") {
-				warnings.push(`Truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
+				warnings.push(`truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines`);
 			} else {
 				warnings.push(
-					`Truncated: ${truncation.outputLines} lines shown (${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)`,
+					`truncated: ${truncation.outputLines} lines shown (${formatSize(truncation.maxBytes ?? DEFAULT_MAX_BYTES)} limit)`,
 				);
 			}
 		}
-		component.addChild(new Text(`\n${theme.fg("muted", warnings.join(" · "))}`, 2, 0));
+		component.addChild(new Text(theme.fg("muted", warnings.join(" · ")), 2, 0));
 	}
 
-	if (output && (timerText || isError)) component.addChild(new Spacer(1));
-	if (timerText || isError)
+	const outcome = options.isPartial ? "" : isError ? theme.fg("error", "✗") : theme.fg("success", "✓");
+	if (timerText || outcome)
 		component.addChild(
 			new Text(
-				[isError ? theme.fg("error", "✗ Failed") : "", timerText ? theme.fg("muted", timerText) : ""]
+				[
+					outcome,
+					timerText
+						? theme.fg(
+								isError ? "error" : "muted",
+								timerText.replace(/^Took /, "").replace(/^Elapsed /, "elapsed "),
+							)
+						: "",
+				]
 					.filter(Boolean)
-					.join(theme.fg("dim", " · ")),
+					.join(" "),
 				2,
 				0,
 			),
@@ -108,7 +116,8 @@ export function createShellRenderers(prompt: string): ToolRenderers {
 		renderCall(rawArgs, theme, context) {
 			const args = rawArgs as { command?: unknown; timeout?: unknown } | undefined;
 			startToolTimer(context);
-			const component = new Box(context.outputPad, 1, (line) => theme.bg("toolPendingBg", line));
+			const component = new Box(context.outputPad, 0, (line) => theme.bg("toolPendingBg", line));
+			component.addChild(new Spacer(1));
 			const command = str(args?.command);
 			component.addChild(
 				command === null

@@ -501,7 +501,7 @@ describe("Coding Agent Tools", () => {
 		it("should report non-zero exit codes as error results with structured content", async () => {
 			const result = await bashTool.execute("test-call-9", { command: "echo out; exit 3" });
 			expect(result.isError).toBe(true);
-			expect(getTextOutput(result)).toBe("out\n\n\nCommand exited with code 3");
+			expect(getTextOutput(result)).toBe("out\n\nCommand exited with code 3");
 			expect(result.structuredContent).toEqual({
 				output: "out\n",
 				truncated: false,

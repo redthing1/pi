@@ -421,7 +421,8 @@ export function createShellToolDefinition(
 				return { text, details };
 			};
 
-			const appendStatus = (text: string, status: string) => `${text ? `${text}\n\n` : ""}${status}`;
+			const appendStatus = (text: string, status: string) =>
+				text ? `${text.replace(/\r?\n$/, "")}\n\n${status}` : status;
 			const startedAt = performance.now();
 
 			try {

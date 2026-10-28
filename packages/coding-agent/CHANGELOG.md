@@ -17,7 +17,7 @@
 
 ### Changed
 
-- Shell tools use neutral panels with readable output and compact timing details. Completed calls omit their configured timeout.
+- Shell tools use compact neutral panels with readable output, explicit outcomes and timing details. Completed calls omit their configured timeout.
 - Separate extension footer statuses with a dim divider while preserving their colors.
 - Native Bash and PowerShell tools stop commands after 32 MiB of captured output to bound temporary-file growth. Redirect larger output to an explicit file.
 - `pi update` for installs from the pi.dev installer no longer passes `--min-release-age=0` to `npm ci`. The release lockfile pins every package, so the flag had no effect, and security scanners that block it stopped the update ([#11262](https://github.com/earendil-works/pi/issues/11262))

@@ -202,9 +202,9 @@ describe("ToolExecutionComponent parity", () => {
 		component.updateResult({ ...result, isError: false }, false);
 
 		const rendered = stripAnsi(component.render(200).join("\n"));
-		expect(rendered.match(/Full output:/g)?.length ?? 0).toBe(1);
-		expect(rendered.indexOf("Full output:")).toBeGreaterThan(rendered.indexOf("line-4000"));
-		expect(rendered).toContain("Truncated: showing 2000 of 4000 lines");
+		expect(rendered.match(/full output:/g)?.length ?? 0).toBe(1);
+		expect(rendered.indexOf("full output:")).toBeGreaterThan(rendered.indexOf("line-4000"));
+		expect(rendered).toContain("truncated: showing 2000 of 4000 lines");
 		expect(rendered).not.toContain("[Showing lines 2001-4000 of 4000. Full output:");
 	});
 
@@ -245,8 +245,8 @@ describe("ToolExecutionComponent parity", () => {
 		vi.advanceTimersByTime(1_000);
 		component.invalidate();
 		expect(stripAnsi(component.render(120).join("\n"))).toBe(completed);
-		expect(running).toContain(`Elapsed ${formatted}`);
-		expect(completed).toContain(`Took ${formatted}`);
+		expect(running).toContain(`elapsed ${formatted}`);
+		expect(completed).toContain(`✓ ${formatted}`);
 	});
 
 	// #10549
@@ -272,8 +272,8 @@ describe("ToolExecutionComponent parity", () => {
 			component.updateResult({ content: [], isError: false, durationMs: 4_200 }, false);
 			return stripAnsi(component.render(120).join("\n"));
 		};
-		expect(render(true)).toContain("Took 4.2s");
-		expect(render(false)).toContain("Took 4.2s");
+		expect(render(true)).toContain("✓ 4.2s");
+		expect(render(false)).toContain("✓ 4.2s");
 	});
 
 	test.each(["$", "PS>"])("%s preserves command structure and settles timeout metadata", (prompt) => {
@@ -297,7 +297,7 @@ describe("ToolExecutionComponent parity", () => {
 			const lines = row.render(width);
 			expect(lines.every((line) => visibleWidth(line) <= width)).toBe(true);
 			const text = stripAnsi(lines.join("\n"));
-			expect(text).toContain("Took 2.4s");
+			expect(text).toContain("✓ 2.4s");
 			expect(text).not.toContain("timeout");
 			expect(text).toContain("output 9");
 			expect(text.indexOf("earlier lines")).toBeLessThan(text.indexOf("output 9"));
@@ -308,14 +308,28 @@ describe("ToolExecutionComponent parity", () => {
 		);
 		row.setExpanded(true);
 		expect(stripAnsi(row.render(100).join("\n"))).toContain(output.split("\n")[0]);
+		row.updateResult({ content: [{ type: "text", text: "first\n\nsecond\n" }], isError: false, durationMs: 2400 });
+		expect(row.render(100).map((line) => stripAnsi(line).trimEnd())).toEqual([
+			"",
+			"",
+			` ${prompt} printf "quoted value" | sort`,
+			`${" ".repeat(prompt.length + 2)}printf "second line"`,
+			"   first",
+			"",
+			"   second",
+			"   ✓ 2.4s",
+			"",
+		]);
 		row.updateResult({
 			content: [{ type: "text", text: "Command timed out after 15 seconds" }],
 			isError: true,
 			durationMs: 15000,
 		});
 		const failed = stripAnsi(row.render(100).join("\n"));
-		expect(failed).toContain("✗ Failed");
+		expect(failed).toContain("✗ 15.0s");
 		expect(failed).toContain("Command timed out after 15 seconds");
+		expect(failed).not.toContain("Completed");
+		expect(failed).toMatch(/Command timed out after 15 seconds[^\n]*\n\s+✗ 15.0s/);
 		expect(vi.getTimerCount()).toBe(0);
 	});
 
