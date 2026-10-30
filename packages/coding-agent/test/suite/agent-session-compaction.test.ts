@@ -248,6 +248,59 @@ describe("AgentSession compaction characterization", () => {
 		expect(harness.session.messages[1]?.role).toBe("compactionSummary");
 	});
 
+	it("dispatches extension commands during manual compaction without admitting model input", async () => {
+		const started = Promise.withResolvers<void>();
+		const finish = Promise.withResolvers<void>();
+		const command = vi.fn();
+		const input = vi.fn();
+		const harness = await createHarness({
+			extensionFactories: [
+				(pi) => {
+					pi.registerCommand("inspect", { handler: command });
+					pi.on("input", input);
+					pi.on("session_before_compact", async (event) => {
+						started.resolve();
+						await finish.promise;
+						return {
+							compaction: {
+								summary: "compacted memory",
+								firstKeptEntryId: event.preparation.firstKeptEntryId,
+								tokensBefore: event.preparation.tokensBefore,
+							},
+						};
+					});
+				},
+			],
+		});
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		const compact = harness.session.compact();
+		try {
+			await started.promise;
+			const preflightResult = vi.fn();
+			await harness.session.prompt("/inspect current", { preflightResult });
+			expect(command).toHaveBeenCalledExactlyOnceWith("current", expect.anything());
+			expect(preflightResult).toHaveBeenCalledExactlyOnceWith("handled");
+			expect(harness.session.isCompacting).toBe(true);
+
+			await expect(harness.session.prompt("ordinary input")).rejects.toThrow("compaction is in progress");
+			await expect(harness.session.prompt("/unknown")).rejects.toThrow("compaction is in progress");
+			await expect(harness.session.prompt("/inspect", { expandPromptTemplates: false })).rejects.toThrow(
+				"compaction is in progress",
+			);
+			expect(command).toHaveBeenCalledTimes(1);
+			expect(input).not.toHaveBeenCalled();
+			expect(harness.faux.state.callCount).toBe(0);
+		} finally {
+			finish.resolve();
+			await compact;
+		}
+		expect(harness.session.isCompacting).toBe(false);
+		expect(harness.session.messages).toContainEqual(
+			expect.objectContaining({ role: "compactionSummary", summary: "compacted memory" }),
+		);
+	});
+
 	it("checkpoints the replayed system state and folds summarized and retained system patches into it", async () => {
 		const harness = await createHarness();
 		harnesses.push(harness);
