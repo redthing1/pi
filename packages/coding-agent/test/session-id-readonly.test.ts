@@ -58,13 +58,14 @@ function hasSessionWithId(root: string, sessionId: string): boolean {
 	return false;
 }
 
-async function runCli(args: string[]): Promise<{ code: number | null; agentDir: string }> {
+async function runCli(args: string[]): Promise<{ code: number | null; agentDir: string; stderr: string }> {
 	const tempRoot = createTempDir();
 	const agentDir = join(tempRoot, "agent");
 	const projectDir = join(tempRoot, "project");
 	mkdirSync(agentDir, { recursive: true });
 	mkdirSync(projectDir, { recursive: true });
 
+	let stderr = "";
 	const code = await new Promise<number | null>((resolvePromise, reject) => {
 		const child = spawn(process.execPath, ["--import", sourceResolverUrl, cliPath, ...args], {
 			cwd: projectDir,
@@ -73,13 +74,16 @@ async function runCli(args: string[]): Promise<{ code: number | null; agentDir: 
 				[ENV_AGENT_DIR]: agentDir,
 				PI_OFFLINE: "1",
 			},
-			stdio: ["ignore", "ignore", "ignore"],
+			stdio: ["ignore", "ignore", "pipe"],
+		});
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk.toString();
 		});
 		child.on("error", reject);
 		child.on("close", resolvePromise);
 	});
 
-	return { code, agentDir };
+	return { code, agentDir, stderr };
 }
 
 function args(overrides: Partial<Args>): Args {
@@ -114,6 +118,22 @@ function persistSession(session: SessionManager, content: string): void {
 }
 
 describe("--session-id", () => {
+	it.each(
+		["--zdr", "--zdr-client", "--no-session"].flatMap((privacy) =>
+			["--session", "--continue", "--resume"].map((selection) => [privacy, selection] as const),
+		),
+	)("rejects %s with stored-session selection %s", async (privacy, selection) => {
+		const result = await runCli([
+			privacy,
+			selection,
+			...(selection === "--session" ? ["export.jsonl"] : []),
+			"--help",
+		]);
+		expect(result.code).toBe(1);
+		expect(result.stderr).toContain("Client ZDR cannot resume");
+		expect(existsSync(join(result.agentDir, "sessions"))).toBe(false);
+	});
+
 	it("does not persist a custom ID for metadata commands", async () => {
 		const result = await runCli(["--session-id", "read-only-help", "--help"]);
 

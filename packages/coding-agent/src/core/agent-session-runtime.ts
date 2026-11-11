@@ -12,7 +12,7 @@ import type {
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import { ZDR_SESSION_ACCESS_DISABLED_MESSAGE } from "./privacy.ts";
 import type { CreateAgentSessionResult } from "./sdk.ts";
-import { assertSessionCwdExists } from "./session-cwd.ts";
+import { assertSessionCwdExists, MissingSessionCwdError } from "./session-cwd.ts";
 import { SessionManager } from "./session-manager.ts";
 
 /**
@@ -41,10 +41,13 @@ export type CreateAgentSessionRuntimeFactory = (options: {
 	projectTrustContext?: ProjectTrustContext;
 }) => Promise<CreateAgentSessionRuntimeResult>;
 
-/**
- * Thrown when /import references a JSONL file path that does not exist.
- */
-export class SessionImportFileNotFoundError extends Error {
+/** An import preparation failure that leaves the current runtime usable. */
+export class SessionImportError extends Error {
+	override name = "SessionImportError";
+}
+
+/** Thrown when /import references a JSONL file path that does not exist. */
+export class SessionImportFileNotFoundError extends SessionImportError {
 	readonly filePath: string;
 
 	constructor(filePath: string) {
@@ -372,38 +375,33 @@ export class AgentSessionRuntime {
 			throw new SessionImportFileNotFoundError(resolvedPath);
 		}
 
-		const inMemory = this.session.privacy.clientZdr;
-		const sessionDir = this.session.sessionManager.getSessionDir();
-		let destinationPath = resolvedPath;
-		let sourceAlreadyStored = true;
-		if (!inMemory) {
-			if (!existsSync(sessionDir)) {
-				mkdirSync(sessionDir, { recursive: true });
-			}
-			destinationPath = join(sessionDir, basename(resolvedPath));
-			sourceAlreadyStored = resolve(destinationPath) === resolvedPath;
-			if (!sourceAlreadyStored) {
-				const { name, ext } = parse(destinationPath);
-				let suffix = 1;
-				while (existsSync(destinationPath)) {
-					destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
+		let sessionManager: SessionManager;
+		try {
+			sessionManager = SessionManager.openInMemory(resolvedPath, cwdOverride);
+			assertSessionCwdExists(sessionManager, this.cwd, resolvedPath);
+			const beforeResult = await this.emitBeforeSwitch("resume", resolvedPath);
+			if (beforeResult.cancelled) return beforeResult;
+
+			if (!this.session.privacy.clientZdr) {
+				const sessionDir = this.session.sessionManager.getSessionDir();
+				let destinationPath = join(sessionDir, basename(resolvedPath));
+				if (resolve(destinationPath) !== resolvedPath) {
+					const { name, ext } = parse(destinationPath);
+					let suffix = 1;
+					while (existsSync(destinationPath)) {
+						destinationPath = join(sessionDir, `${name}-${suffix++}${ext}`);
+					}
+					mkdirSync(sessionDir, { recursive: true });
+					copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);
 				}
+				sessionManager = SessionManager.open(destinationPath, sessionDir, cwdOverride);
 			}
-		}
-		const beforeResult = await this.emitBeforeSwitch("resume", destinationPath);
-		if (beforeResult.cancelled) {
-			return beforeResult;
+		} catch (error) {
+			if (error instanceof MissingSessionCwdError) throw error;
+			throw new SessionImportError(error instanceof Error ? error.message : String(error), { cause: error });
 		}
 
 		const previousSessionFile = this.session.sessionFile;
-		if (!inMemory && !sourceAlreadyStored) {
-			copyFileSync(resolvedPath, destinationPath, constants.COPYFILE_EXCL);
-		}
-
-		const sessionManager = inMemory
-			? SessionManager.openInMemory(resolvedPath, cwdOverride)
-			: SessionManager.open(destinationPath, sessionDir, cwdOverride);
-		assertSessionCwdExists(sessionManager, this.cwd);
 		await this.teardownCurrent("resume", sessionManager.getSessionFile());
 		this.apply(
 			await this.createRuntime({

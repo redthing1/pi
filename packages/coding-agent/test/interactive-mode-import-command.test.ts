@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { SessionImportFileNotFoundError } from "../src/core/agent-session-runtime.ts";
+import { SessionImportError, SessionImportFileNotFoundError } from "../src/core/agent-session-runtime.ts";
+import { MissingSessionCwdError } from "../src/core/session-cwd.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 
 type PathCommand = "/export" | "/import";
@@ -77,7 +78,7 @@ describe("InteractiveMode /import parsing", () => {
 			"Import session",
 			"Replace current session with path/to/session.jsonl?",
 		);
-		expect(importFromJsonl).toHaveBeenCalledWith("path/to/session.jsonl");
+		expect(importFromJsonl).toHaveBeenCalledWith("path/to/session.jsonl", undefined);
 		expect(showError).not.toHaveBeenCalled();
 		expect(showStatus).toHaveBeenCalledWith("Session imported from: path/to/session.jsonl");
 	});
@@ -105,7 +106,7 @@ describe("InteractiveMode /import parsing", () => {
 
 		await interactiveModePrototype.handleImportCommand.call(context, "/import john's/session.jsonl");
 
-		expect(importFromJsonl).toHaveBeenCalledWith("john's/session.jsonl");
+		expect(importFromJsonl).toHaveBeenCalledWith("john's/session.jsonl", undefined);
 		expect(showError).not.toHaveBeenCalled();
 		expect(showStatus).toHaveBeenCalledWith("Session imported from: john's/session.jsonl");
 	});
@@ -139,5 +140,43 @@ describe("InteractiveMode /import parsing", () => {
 		expect(showError).toHaveBeenCalledWith("Failed to import session: File not found: /tmp/missing-session.jsonl");
 		expect(showStatus).not.toHaveBeenCalled();
 		expect(handleFatalRuntimeError).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])("keeps preparation errors recoverable after a cwd retry: %s", async (retryCwd) => {
+		const invalid = new SessionImportError("The input is not a session JSONL file");
+		const importFromJsonl = vi.fn(async () => {
+			throw invalid;
+		});
+		if (retryCwd) {
+			importFromJsonl.mockRejectedValueOnce(
+				new MissingSessionCwdError({
+					sessionFile: "/export/session.jsonl",
+					sessionCwd: "/missing",
+					fallbackCwd: "/workspace",
+				}),
+			);
+		}
+		const showError = vi.fn();
+		const handleFatalRuntimeError = vi.fn(async (): Promise<never> => {
+			throw new Error("unexpected fatal error");
+		});
+		const context: ImportCommandContext = {
+			clearStatusIndicator: vi.fn(),
+			runtimeHost: { importFromJsonl },
+			showError,
+			showStatus: vi.fn(),
+			showExtensionConfirm: vi.fn(async () => true),
+			handleRuntimeSessionChange: vi.fn(async () => {}),
+			renderCurrentSessionState: vi.fn(),
+			handleFatalRuntimeError,
+			promptForMissingSessionCwd: vi.fn(async () => "/workspace"),
+			getPathCommandArgument: interactiveModePrototype.getPathCommandArgument,
+		};
+		await expect(
+			interactiveModePrototype.handleImportCommand.call(context, "/import session.jsonl"),
+		).resolves.toBeUndefined();
+		expect(showError).toHaveBeenCalledWith(`Failed to import session: ${invalid.message}`);
+		expect(handleFatalRuntimeError).not.toHaveBeenCalled();
+		if (retryCwd) expect(importFromJsonl).toHaveBeenLastCalledWith("session.jsonl", "/workspace");
 	});
 });

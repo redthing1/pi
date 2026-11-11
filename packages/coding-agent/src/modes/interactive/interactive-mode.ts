@@ -58,7 +58,7 @@ import {
 	VERSION,
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
-import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
+import { type AgentSessionRuntime, SessionImportError } from "../../core/agent-session-runtime.ts";
 import type { AgentSessionRuntimeDiagnostic } from "../../core/agent-session-services.ts";
 import {
 	CACHE_TTL_MS,
@@ -6424,34 +6424,32 @@ export class InteractiveMode {
 			return;
 		}
 
-		try {
-			this.clearStatusIndicator();
-			const result = await this.runtimeHost.importFromJsonl(inputPath);
-			if (result.cancelled) {
-				this.showStatus("Import cancelled");
-				return;
-			}
-			this.showStatus(`Session imported from: ${inputPath}`);
-		} catch (error: unknown) {
-			if (error instanceof MissingSessionCwdError) {
-				const selectedCwd = await this.promptForMissingSessionCwd(error);
-				if (!selectedCwd) {
-					this.showStatus("Import cancelled");
-					return;
-				}
-				const result = await this.runtimeHost.importFromJsonl(inputPath, selectedCwd);
+		let cwdOverride: string | undefined;
+		for (;;) {
+			try {
+				this.clearStatusIndicator();
+				const result = await this.runtimeHost.importFromJsonl(inputPath, cwdOverride);
 				if (result.cancelled) {
 					this.showStatus("Import cancelled");
 					return;
 				}
 				this.showStatus(`Session imported from: ${inputPath}`);
 				return;
+			} catch (error: unknown) {
+				if (error instanceof MissingSessionCwdError) {
+					cwdOverride = await this.promptForMissingSessionCwd(error);
+					if (!cwdOverride) {
+						this.showStatus("Import cancelled");
+						return;
+					}
+					continue;
+				}
+				if (error instanceof SessionImportError) {
+					this.showError(`Failed to import session: ${error.message}`);
+					return;
+				}
+				await this.handleFatalRuntimeError("Failed to import session", error);
 			}
-			if (error instanceof SessionImportFileNotFoundError) {
-				this.showError(`Failed to import session: ${error.message}`);
-				return;
-			}
-			await this.handleFatalRuntimeError("Failed to import session", error);
 		}
 	}
 

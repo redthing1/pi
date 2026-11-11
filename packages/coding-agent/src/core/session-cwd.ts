@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 
 export interface SessionCwdIssue {
 	sessionFile?: string;
@@ -14,14 +14,14 @@ interface SessionCwdSource {
 export function getMissingSessionCwdIssue(
 	sessionManager: SessionCwdSource,
 	fallbackCwd: string,
+	sessionFile = sessionManager.getSessionFile(),
 ): SessionCwdIssue | undefined {
-	const sessionFile = sessionManager.getSessionFile();
 	if (!sessionFile) {
 		return undefined;
 	}
 
 	const sessionCwd = sessionManager.getCwd();
-	if (!sessionCwd || existsSync(sessionCwd)) {
+	if (!sessionCwd || (existsSync(sessionCwd) && statSync(sessionCwd).isDirectory())) {
 		return undefined;
 	}
 
@@ -51,8 +51,12 @@ export class MissingSessionCwdError extends Error {
 	}
 }
 
-export function assertSessionCwdExists(sessionManager: SessionCwdSource, fallbackCwd: string): void {
-	const issue = getMissingSessionCwdIssue(sessionManager, fallbackCwd);
+export function assertSessionCwdExists(
+	sessionManager: SessionCwdSource,
+	fallbackCwd: string,
+	sessionFile?: string,
+): void {
+	const issue = getMissingSessionCwdIssue(sessionManager, fallbackCwd, sessionFile);
 	if (issue) {
 		throw new MissingSessionCwdError(issue);
 	}

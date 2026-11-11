@@ -568,8 +568,8 @@ function privacyModeFromArgs(parsed: Args): PrivacyMode {
 }
 
 function validatePrivacyFlags(parsed: Args): void {
-	if (parsed.zdr && (parsed.session || parsed.fork || parsed.continue || parsed.resume)) {
-		console.error(chalk.red("Error: --zdr cannot resume, continue, or fork stored sessions"));
+	if (parsed.noSession && (parsed.session || parsed.fork || parsed.continue || parsed.resume)) {
+		console.error(chalk.red("Error: Client ZDR cannot resume stored sessions; use /import <path.jsonl>."));
 		process.exit(1);
 	}
 }

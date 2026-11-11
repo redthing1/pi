@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fauxAssistantMessage, registerFauxProvider } from "@earendil-works/pi-ai/compat";
@@ -12,6 +12,7 @@ import {
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { ZDR_SESSION_ACCESS_DISABLED_MESSAGE } from "../src/core/privacy.ts";
+import { MissingSessionCwdError } from "../src/core/session-cwd.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import type {
 	ExtensionFactory,
@@ -99,7 +100,9 @@ describe("AgentSessionRuntime session lifecycle events", () => {
 		const runtimeHost = await createAgentSessionRuntime(createRuntime, {
 			cwd: tempDir,
 			agentDir: tempDir,
-			sessionManager: clientZdr ? SessionManager.inMemory(tempDir) : SessionManager.create(tempDir),
+			sessionManager: clientZdr
+				? SessionManager.inMemory(tempDir)
+				: SessionManager.create(tempDir, join(tempDir, "sessions")),
 		});
 		await runtimeHost.session.bindExtensions({});
 
@@ -219,6 +222,72 @@ describe("AgentSessionRuntime session lifecycle events", () => {
 		expect(readFileSync(sourcePath, "utf-8")).toBe(sourceContent);
 		expect(readFileSync(persistedPath!, "utf-8")).toContain("continued normally");
 	});
+
+	it.each([false, true])(
+		"validates the readable import source before replacement (client ZDR: %s)",
+		async (clientZdr) => {
+			const inspected: string[] = [];
+			const { runtimeHost, tempDir } = await createRuntimeHost((pi) => {
+				pi.on("session_before_switch", (event) => {
+					if (event.reason !== "resume") return;
+					if (!event.targetSessionFile || !existsSync(event.targetSessionFile)) return { cancel: true };
+					inspected.push(event.targetSessionFile);
+				});
+			}, clientZdr);
+			runtimeHost.session.sessionManager.appendMessage({ role: "user", content: "transfer me", timestamp: 1 });
+			const source = join(tempDir, "export.jsonl");
+			runtimeHost.session.exportToJsonl(source);
+			const original = readFileSync(source, "utf8");
+			await expect(runtimeHost.importFromJsonl(source)).resolves.toEqual({ cancelled: false });
+			expect(inspected).toEqual([source]);
+			expect(readFileSync(source, "utf8")).toBe(original);
+			expect(runtimeHost.session.sessionManager.isPersisted()).toBe(!clientZdr);
+		},
+	);
+
+	it.each([false, true])(
+		"leaves the runtime and managed storage intact after an invalid import (client ZDR: %s)",
+		async (clientZdr) => {
+			const { runtimeHost, tempDir } = await createRuntimeHost(() => {}, clientZdr);
+			const current = runtimeHost.session;
+			const source = join(tempDir, "invalid.jsonl");
+			writeFileSync(source, "<!doctype html><html>HTML is not a session JSONL file</html>");
+			const sessionDir = current.sessionManager.getSessionDir();
+			const stored = sessionDir && existsSync(sessionDir) ? readdirSync(sessionDir) : [];
+			await expect(runtimeHost.importFromJsonl(source)).rejects.toThrow("not a valid");
+			expect(runtimeHost.session).toBe(current);
+			expect(sessionDir && existsSync(sessionDir) ? readdirSync(sessionDir) : []).toEqual(stored);
+			await current.prompt("continue the original conversation");
+			expect(current.messages.some((message) => message.role === "assistant")).toBe(true);
+		},
+	);
+
+	it.each([false, true].flatMap((clientZdr) => [false, true].map((fileCwd) => [clientZdr, fileCwd] as const)))(
+		"allows choosing a local cwd for an imported session (client ZDR: %s, cwd is a file: %s)",
+		async (clientZdr, fileCwd) => {
+			const { runtimeHost, tempDir } = await createRuntimeHost(() => {}, clientZdr);
+			const current = runtimeHost.session;
+			const source = join(tempDir, "moved.jsonl");
+			const sessionCwd = join(tempDir, "stored-cwd");
+			if (fileCwd) writeFileSync(sessionCwd, "not a directory");
+			writeFileSync(
+				source,
+				`${JSON.stringify({
+					type: "session",
+					version: 3,
+					id: "moved",
+					timestamp: new Date().toISOString(),
+					cwd: sessionCwd,
+				})}\n`,
+			);
+			const original = readFileSync(source, "utf8");
+			await expect(runtimeHost.importFromJsonl(source)).rejects.toBeInstanceOf(MissingSessionCwdError);
+			expect(runtimeHost.session).toBe(current);
+			await expect(runtimeHost.importFromJsonl(source, tempDir)).resolves.toEqual({ cancelled: false });
+			expect(runtimeHost.cwd).toBe(tempDir);
+			expect(readFileSync(source, "utf8")).toBe(original);
+		},
+	);
 
 	it("runs beforeSessionInvalidate after session_shutdown and before rebindSession", async () => {
 		const phases: string[] = [];
