@@ -16,7 +16,7 @@ Read [FORK.md](FORK.md) before upstream integration or changes to dependencies, 
 - Prefer direct code, precise types, and existing abstractions. Avoid unnecessary helpers, options, dependencies, and documentation.
 - Use erasable TypeScript syntax in root-checked code: no enums, namespaces, parameter properties, or other constructs requiring emission. Prefer top-level imports; retain local lazy imports where they serve a clear purpose.
 - Keep keybindings configurable through the existing defaults, not hardcoded key checks.
-- Update model catalogs through `packages/ai/scripts/generate-models.ts`, never by editing `models.generated.ts` directly.
+- Update model catalogs through `packages/ai/catalog/generate.ts`, never by editing `models.generated.ts` directly.
 - Put changelog additions under the affected package's existing `[Unreleased]` subsections; preserve released history.
 
 ## Verification and dependencies

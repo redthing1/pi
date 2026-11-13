@@ -7,6 +7,7 @@ import {
 	createAssistantMessageEventStream,
 	type Model,
 	normalizeContext,
+	registerSessionResourceCleanup,
 	type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -271,5 +272,32 @@ describe("createAgentSession provider privacy", () => {
 		const options = await captureProviderOptions(model, { remoteZdr: true });
 
 		expect(options?.allowModelFallbacks).toBe(false);
+	});
+	it.each([false, true])(
+		"uses stateless Anthropic requests only when remote ZDR is required: %s",
+		async (remoteZdr) => {
+			const model: Model<Api> = {
+				...createModel("capture-provider", "https://example.invalid"),
+				api: "anthropic-messages",
+				zdr: true,
+			};
+			const options = await captureProviderOptions(model, { remoteZdr });
+			expect(options?.disableContinuation).toBe(remoteZdr ? true : undefined);
+		},
+	);
+	it("disposes provider resources by runtime identity", async () => {
+		const disposed: Array<string | undefined> = [];
+		const unregister = registerSessionResourceCleanup((id) => disposed.push(id));
+		try {
+			const durableId = "00000000-0000-4000-8000-000000000123";
+			const options = await captureProviderOptions(createModel("capture-provider", "https://example.invalid"), {
+				sessionId: durableId,
+			});
+			expect(options?.sessionId).toBeDefined();
+			expect(options?.sessionId).not.toBe(durableId);
+			expect(disposed).toEqual([options?.sessionId]);
+		} finally {
+			unregister();
+		}
 	});
 });

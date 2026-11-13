@@ -1,13 +1,18 @@
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type OAuthChallenge, OAuthIssuerMismatchError } from "@earendil-works/pi-mcp/oauth";
+import {
+	type McpOAuthServerStore,
+	type McpOAuthSettings,
+	McpSignInCancelledError,
+	type OAuthChallenge,
+	OAuthIssuerMismatchError,
+} from "@earendil-works/pi-mcp/oauth";
 import { afterEach, describe, expect, it } from "vitest";
 import { InMemoryAuthStorageBackend } from "../src/core/auth-storage.ts";
 import {
 	createMcpAuthProvider,
 	McpOAuthCredentialStore,
-	type McpOAuthSettings,
 	type McpSignInPrompt,
 	signInMcpServer,
 } from "../src/extensions/mcp/oauth.ts";
@@ -70,6 +75,45 @@ describe("MCP OAuth refresh", () => {
 		expect(server.log.filter((entry) => entry === "token refresh")).toHaveLength(1);
 		for (const { provider } of processes) expect(await provider.token()).toBe("access-2");
 		// The lock is released.
+		expect(readdirSync(lockDir)).toEqual([]);
+	});
+
+	it("cancels a sign-in that waits for another process's refresh", async () => {
+		const { server, lockDir, process } = await signedIn();
+		let release = () => {};
+		const held = process().store.withRefreshLock(
+			() =>
+				new Promise<void>((resolve) => {
+					release = resolve;
+				}),
+		);
+		// The sign-in's store, recording its wait for the lock.
+		const store = process().store;
+		let waiting: Promise<unknown> | undefined;
+		const recording: McpOAuthServerStore = {
+			...store,
+			withRefreshLock: (fn) => {
+				const run = store.withRefreshLock(fn);
+				waiting = run;
+				return run;
+			},
+		};
+		const controller = new AbortController();
+		const signIn = signInMcpServer({
+			serverUrl: server.url,
+			store: recording,
+			settings: {},
+			prompt: { showAuthorizationUrl: () => {}, promptForRedirectUrl: async () => undefined },
+			signal: controller.signal,
+		});
+		setTimeout(() => controller.abort(), 200);
+		await expect(signIn).rejects.toBeInstanceOf(McpSignInCancelledError);
+
+		release();
+		await held;
+		// The cancelled sign-in takes the lock once it is free and releases it without refreshing.
+		await waiting;
+		expect(server.log.filter((entry) => entry === "token refresh")).toHaveLength(0);
 		expect(readdirSync(lockDir)).toEqual([]);
 	});
 
@@ -162,6 +206,7 @@ describe("MCP OAuth sign-in", () => {
 // #10302
 describe("MCP OAuth direct registration", () => {
 	const cleanups: (() => Promise<void>)[] = [];
+	const dcr: McpOAuthSettings = { clientRegistration: "dcr" };
 
 	afterEach(async () => {
 		while (cleanups.length > 0) await cleanups.pop()?.();
@@ -181,9 +226,9 @@ describe("MCP OAuth direct registration", () => {
 		return { server, store, signIn };
 	}
 
-	it("registers dynamically by default, even when the server supports documents", async () => {
+	it("registers dynamically with dcr, even when the server supports documents", async () => {
 		const { server, signIn } = await startServer({ cimd: true, issParameter: true });
-		await signIn({});
+		await signIn(dcr);
 		expect(server.registrations).toHaveLength(1);
 		expect(server.authorizations[0].get("client_id")).toBe("client-1");
 	});

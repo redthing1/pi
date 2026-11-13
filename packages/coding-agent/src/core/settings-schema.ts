@@ -1,5 +1,5 @@
-import { ModelThinkingLevelSchema } from "@earendil-works/pi-ai/providers/model-schema";
 import { type Static, type TSchemaOptions, Type } from "typebox";
+import { ModelThinkingLevelSchema } from "./pi-ai-schemas.ts";
 import { SETTINGS_DEFAULTS } from "./settings-defaults.ts";
 
 function nonNegativeSafeInteger(options: { default?: number } = {}) {
@@ -208,6 +208,11 @@ export const SettingsSchema = Type.Object(
 	{
 		$schema: Type.Optional(Type.String({ description: "JSON Schema reference." })),
 		lastChangelogVersion: Type.Optional(Type.String()),
+		extensionChangelogVersions: Type.Optional(
+			Type.Record(Type.String(), Type.String(), {
+				description: "Last seen changelog version per extension package.",
+			}),
+		),
 		defaultProvider: Type.Optional(Type.String()),
 		providerScope: Type.Optional(Type.String()),
 		providerLastModels: Type.Optional(Type.Record(Type.String(), Type.String())),

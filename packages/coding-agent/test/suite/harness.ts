@@ -112,7 +112,7 @@ export interface HarnessOptions {
 	provider?: string;
 	models?: FauxModelDefinition[];
 	settings?: Partial<Settings>;
-	tools?: AgentTool[];
+	tools?: AgentTool<any>[];
 	initialActiveToolNames?: string[];
 	allowedToolNames?: string[];
 	excludedToolNames?: string[];

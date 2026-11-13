@@ -155,6 +155,7 @@ describe("google-vertex api key resolution", () => {
 
 		expect(googleGenAiMock.constructorCalls).toHaveLength(1);
 		expect(googleGenAiMock.constructorCalls[0]?.httpOptions).not.toHaveProperty("baseUrl");
+		expect(googleGenAiMock.constructorCalls[0]?.httpOptions).toHaveProperty("fetch", globalThis.fetch);
 	});
 
 	it("lets explicit headers override the default User-Agent", async () => {
@@ -168,6 +169,7 @@ describe("google-vertex api key resolution", () => {
 
 		expect(googleGenAiMock.constructorCalls).toHaveLength(1);
 		expect(googleGenAiMock.constructorCalls[0]?.httpOptions).toEqual({
+			fetch: globalThis.fetch,
 			headers: { "User-Agent": "custom-agent", "x-goog-api-client": "" },
 		});
 	});

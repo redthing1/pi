@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { unlink } from "node:fs/promises";
-import * as os from "node:os";
 import {
 	type Component,
 	Container,
@@ -17,7 +16,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { KeybindingsManager } from "../../../core/keybindings.ts";
 import type { SessionInfo, SessionListProgress } from "../../../core/session-manager.ts";
-import { canonicalizePath as _canonicalizePath } from "../../../utils/paths.ts";
+import { canonicalizePath, getPathComparisonKey, shortenHomePath } from "../../../utils/paths.ts";
 import { getSelectListTheme, theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
@@ -28,15 +27,6 @@ type SessionScope = "current" | "all";
 export interface SessionSelection {
 	path: string;
 	cwdOverride?: string;
-}
-
-function shortenPath(path: string): string {
-	const home = os.homedir();
-	if (!path) return path;
-	if (path.startsWith(home)) {
-		return `~${path.slice(home.length)}`;
-	}
-	return path;
 }
 
 function formatSessionDate(date: Date): string {
@@ -55,9 +45,9 @@ function formatSessionDate(date: Date): string {
 	return `${Math.floor(diffDays / 365)}y`;
 }
 
-function canonicalizePath(path: string | undefined): string | undefined {
-	if (!path) return path;
-	return _canonicalizePath(path);
+/** Comparison key for a session file path; follows symlinks and ignores case on Windows. */
+function getSessionPathKey(path: string): string {
+	return getPathComparisonKey(canonicalizePath(path));
 }
 
 class SessionSelectorHeader implements Component {
@@ -217,16 +207,16 @@ function buildSessionTree(sessions: SessionInfo[]): SessionTreeNode[] {
 	const byPath = new Map<string, SessionTreeNode>();
 
 	for (const session of sessions) {
-		const sessionPath = canonicalizePath(session.path) ?? session.path;
+		const sessionPath = getSessionPathKey(session.path);
 		byPath.set(sessionPath, { session, children: [], latestActivity: session.modified.getTime() });
 	}
 
 	const roots: SessionTreeNode[] = [];
 
 	for (const session of sessions) {
-		const sessionPath = canonicalizePath(session.path) ?? session.path;
+		const sessionPath = getSessionPathKey(session.path);
 		const node = byPath.get(sessionPath)!;
-		const parentPath = canonicalizePath(session.parentSessionPath);
+		const parentPath = session.parentSessionPath ? getSessionPathKey(session.parentSessionPath) : undefined;
 
 		if (parentPath && byPath.has(parentPath)) {
 			byPath.get(parentPath)!.children.push(node);
@@ -296,6 +286,8 @@ class SessionList implements Component, Focusable {
 	private filteredSessions: FlatSessionNode[] = [];
 	private selectedIndex: number = 0;
 	private selectionTouched = false;
+	// Session to select once it appears, while a progressive reload has not yet delivered it
+	private pendingSelectedPath?: string;
 	private searchInput: Input;
 	private showCwd = false;
 	private sortMode: SortMode = "threaded";
@@ -303,7 +295,7 @@ class SessionList implements Component, Focusable {
 	private keybindings: KeybindingsManager;
 	private showPath = false;
 	private confirmingDeletePath: string | null = null;
-	private currentSessionCanonicalPath?: string;
+	private currentSessionPathKey?: string;
 	public onSelect?: (session: SessionInfo) => void;
 	public onCancel?: () => void;
 	public onExit: () => void = () => {};
@@ -342,7 +334,7 @@ class SessionList implements Component, Focusable {
 		this.sortMode = sortMode;
 		this.nameFilter = nameFilter;
 		this.keybindings = keybindings;
-		this.currentSessionCanonicalPath = canonicalizePath(currentSessionFilePath);
+		this.currentSessionPathKey = currentSessionFilePath ? getSessionPathKey(currentSessionFilePath) : undefined;
 		this.filterSessions("");
 
 		// Handle Enter in search input - select current item
@@ -366,8 +358,13 @@ class SessionList implements Component, Focusable {
 		this.filterSessions(this.searchInput.getValue());
 	}
 
-	setSessions(sessions: SessionInfo[], showCwd: boolean): void {
-		const selectedPath = this.selectionTouched ? this.getSelectedSessionPath() : undefined;
+	/**
+	 * @param partial true when more sessions are still loading; a selected session missing from a
+	 * partial list stays the selection target until it arrives
+	 */
+	setSessions(sessions: SessionInfo[], showCwd: boolean, partial = false): void {
+		const pendingPath = this.selectionTouched ? this.pendingSelectedPath : undefined;
+		const selectedPath = this.selectionTouched ? (pendingPath ?? this.getSelectedSessionPath()) : undefined;
 		this.allSessions = sessions;
 		this.showCwd = showCwd;
 		this.filterSessions(this.searchInput.getValue());
@@ -375,7 +372,16 @@ class SessionList implements Component, Focusable {
 			this.selectedIndex = 0;
 		} else if (selectedPath) {
 			const selectedIndex = this.filteredSessions.findIndex((node) => node.session.path === selectedPath);
-			if (selectedIndex >= 0) this.selectedIndex = selectedIndex;
+			if (selectedIndex >= 0) {
+				this.selectedIndex = selectedIndex;
+				this.pendingSelectedPath = undefined;
+			} else if (partial) {
+				// The selected session may not have loaded yet: keep it as the target instead of
+				// adopting whichever session the index now points to.
+				this.pendingSelectedPath = selectedPath;
+			} else {
+				this.pendingSelectedPath = undefined;
+			}
 		}
 	}
 
@@ -420,8 +426,8 @@ class SessionList implements Component, Focusable {
 	}
 
 	private isCurrentSessionPath(path: string): boolean {
-		if (!this.currentSessionCanonicalPath) return false;
-		return (canonicalizePath(path) ?? path) === this.currentSessionCanonicalPath;
+		if (!this.currentSessionPathKey) return false;
+		return getSessionPathKey(path) === this.currentSessionPathKey;
 	}
 
 	invalidate(): void {}
@@ -481,10 +487,10 @@ class SessionList implements Component, Focusable {
 			const msgCount = String(session.messageCount);
 			let rightPart = `${msgCount} ${age}`;
 			if (this.showCwd && session.cwd) {
-				rightPart = `${shortenPath(session.cwd)} ${rightPart}`;
+				rightPart = `${shortenHomePath(session.cwd)} ${rightPart}`;
 			}
 			if (this.showPath) {
-				rightPart = `${shortenPath(session.path)} ${rightPart}`;
+				rightPart = `${shortenHomePath(session.path)} ${rightPart}`;
 			}
 
 			// Cursor
@@ -616,6 +622,7 @@ class SessionList implements Component, Focusable {
 		}
 
 		this.selectionTouched = true;
+		this.pendingSelectedPath = undefined;
 		// Up arrow
 		if (kb.matches(keyData, "tui.select.up")) {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
@@ -699,6 +706,10 @@ async function deleteSessionFile(
  * Component that renders a session selector
  */
 export class SessionSelectorComponent extends Container implements Focusable {
+	get capturesViewportInput(): boolean {
+		return this.mode !== "rename";
+	}
+
 	handleInput(data: string): void {
 		if (this.mode === "cwd") {
 			this.cwdSelectList?.handleInput(data);
@@ -917,12 +928,12 @@ export class SessionSelectorComponent extends Container implements Focusable {
 			{
 				value: "session",
 				label: "Use original session directory",
-				description: shortenPath(session.cwd),
+				description: shortenHomePath(session.cwd),
 			},
 			{
 				value: "current",
 				label: "Use current directory",
-				description: shortenPath(currentCwd),
+				description: shortenHomePath(currentCwd),
 			},
 		];
 		this.cwdSelectList = new SelectList(items, items.length, getSelectListTheme());
@@ -1029,7 +1040,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 				} else {
 					this.allSessions = sessions;
 				}
-				if (scope === this.scope) this.sessionList.setSessions(sessions, showCwd);
+				if (scope === this.scope) this.sessionList.setSessions(sessions, showCwd, true);
 			}
 			if (scope !== this.scope) return;
 			this.header.setProgress(loaded, total);
@@ -1101,7 +1112,7 @@ export class SessionSelectorComponent extends Container implements Focusable {
 		const loading = (this.scope === "current" ? this.currentLoad : this.allLoad) !== null;
 		this.header.setScope(this.scope);
 		this.header.setLoading(loading);
-		this.sessionList.setSessions(sessions ?? [], this.scope === "all");
+		this.sessionList.setSessions(sessions ?? [], this.scope === "all", loading || sessions === null);
 		this.requestRender();
 		if (sessions === null && !loading) void this.loadScope(this.scope);
 	}

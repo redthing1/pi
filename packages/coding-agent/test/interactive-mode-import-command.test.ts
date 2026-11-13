@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionImportError, SessionImportFileNotFoundError } from "../src/core/agent-session-runtime.ts";
-import { MissingSessionCwdError } from "../src/core/session-cwd.ts";
+import { type MissingSessionCwdChoice, MissingSessionCwdError } from "../src/core/session-cwd.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 
 type PathCommand = "/export" | "/import";
@@ -19,7 +19,7 @@ type ImportCommandContext = {
 	handleRuntimeSessionChange: () => Promise<void>;
 	renderCurrentSessionState: () => void;
 	handleFatalRuntimeError: (prefix: string, error: unknown) => Promise<never>;
-	promptForMissingSessionCwd: (error: unknown) => Promise<string | undefined>;
+	promptForMissingSessionCwd: (error: unknown) => Promise<MissingSessionCwdChoice | undefined>;
 	getPathCommandArgument: (text: string, command: PathCommand) => string | undefined;
 };
 
@@ -169,7 +169,7 @@ describe("InteractiveMode /import parsing", () => {
 			handleRuntimeSessionChange: vi.fn(async () => {}),
 			renderCurrentSessionState: vi.fn(),
 			handleFatalRuntimeError,
-			promptForMissingSessionCwd: vi.fn(async () => "/workspace"),
+			promptForMissingSessionCwd: vi.fn(async () => "continue" as const),
 			getPathCommandArgument: interactiveModePrototype.getPathCommandArgument,
 		};
 		await expect(

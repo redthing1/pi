@@ -55,6 +55,8 @@ describe("untrusted tool display text", () => {
 	] as const)("handles unvalidated numeric arguments in the %s renderer", (_name, renderer) => {
 		const args = { command: "fixture", pattern: "fixture", path: "fixture", timeout: payload, limit: payload };
 		const context: ToolRenderContext = {
+			keyText: () => "",
+			keyHint: (_key, description) => description,
 			args,
 			toolCallId: "synthetic",
 			invalidate() {},
@@ -72,6 +74,7 @@ describe("untrusted tool display text", () => {
 		};
 		const lines = renderer.renderCall!(args, theme, context).render(120);
 		expect(lines.some((line) => unsafe.test(stripAnsi(line)))).toBe(false);
-		expect(lines.some((line) => line.includes("[invalid arg]"))).toBe(true);
+		if (_name === "bash") expect(lines.some((line) => line.includes("fixture"))).toBe(true);
+		else expect(lines.some((line) => line.includes("[invalid arg]"))).toBe(true);
 	});
 });

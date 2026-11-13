@@ -70,6 +70,11 @@ function makeJsonSchemaNodeStrict(schema: unknown, isUnsupportedKeyword?: Unsupp
 		}
 	}
 
+	// OpenAI strict mode rejects nodes without a type; a bare enum counts as typed, a bare const does not.
+	if (schema.type === undefined && schema.anyOf === undefined && schema.enum === undefined) {
+		throw new UnsupportedStrictJsonSchemaError("schemas without a type are unsupported");
+	}
+
 	if (schema.anyOf !== undefined) {
 		if (!Array.isArray(schema.anyOf) || schema.anyOf.length === 0) {
 			throw new UnsupportedStrictJsonSchemaError("anyOf must contain at least one schema");
@@ -137,6 +142,12 @@ export function makeStrictJsonSchema(
 		throw new UnsupportedStrictJsonSchemaError("root schema must have type object");
 	}
 	return cloned;
+}
+
+/** Returns true for a tool that asks for strict JSON-schema sampling only when possible (`strict: "prefer"`). */
+export function prefersJsonSchemaStrictSampling(tool: Tool): boolean {
+	const config = tool.constrainedSampling;
+	return !!config && config.type === "json_schema" && config.strict === "prefer";
 }
 
 export function getJsonSchemaToolParameters(tool: Tool, strict: boolean | undefined): Tool["parameters"] {

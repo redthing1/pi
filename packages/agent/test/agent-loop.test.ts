@@ -7,7 +7,7 @@ import {
 	type TranscriptContext,
 	type UserMessage,
 } from "@earendil-works/pi-ai";
-import { Type } from "typebox";
+import { arr, obj, str } from "@earendil-works/pi-schema";
 import { describe, expect, it } from "vitest";
 import { agentLoop, agentLoopContinue, runAgentLoop, runToolCall } from "../src/agent-loop.ts";
 import { setDefaultStreamFn } from "../src/index.ts";
@@ -568,7 +568,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should handle tool calls and results", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executed: string[] = [];
 		const toolUsage = {
 			input: 1,
@@ -665,7 +665,7 @@ describe("agentLoop with AgentMessage", () => {
 
 	// #10549
 	it("records how long execute() took on the tool result, excluding hooks", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
@@ -719,7 +719,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should not execute tool calls from a length-truncated assistant message", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executed: string[] = [];
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
@@ -791,7 +791,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should not execute tool calls whose final arguments failed to parse", async () => {
-		const toolSchema = Type.Object({});
+		const toolSchema = obj({});
 		let executions = 0;
 		const tool: AgentTool<typeof toolSchema, Record<string, never>> = {
 			name: "noop",
@@ -844,7 +844,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should execute mutated beforeToolCall args without revalidation", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executed: Array<string | number> = [];
 		const tool: AgentTool<typeof toolSchema, { value: string | number }> = {
 			name: "echo",
@@ -905,8 +905,8 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should prepare tool arguments for validation", async () => {
-		const replaceSchema = Type.Object({ oldText: Type.String(), newText: Type.String() });
-		const toolSchema = Type.Object({ edits: Type.Array(replaceSchema) });
+		const replaceSchema = obj({ oldText: str(), newText: str() });
+		const toolSchema = obj({ edits: arr(replaceSchema) });
 		const executed: Array<Array<{ oldText: string; newText: string }>> = [];
 		const tool: AgentTool<typeof toolSchema, { count: number }> = {
 			name: "edit",
@@ -984,7 +984,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should emit tool_execution_end in completion order but persist tool results in source order", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		let firstResolved = false;
 		let parallelObserved = false;
 		let releaseFirst: (() => void) | undefined;
@@ -1078,7 +1078,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("does not start prepared parallel tools after a later preflight aborts", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executions: string[] = [];
 		const preflights: string[] = [];
 		const resultHooks: string[] = [];
@@ -1162,7 +1162,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should inject queued messages after all tool calls complete", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executed: string[] = [];
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
@@ -1267,7 +1267,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should force sequential execution when a tool has executionMode=sequential even with default parallel config", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		let firstResolved = false;
 		let parallelObserved = false;
 		let releaseFirst: (() => void) | undefined;
@@ -1349,7 +1349,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should force sequential execution when one of multiple tools has executionMode=sequential", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executionOrder: string[] = [];
 		let releaseSlow: (() => void) | undefined;
 		const slowDone = new Promise<void>((resolve) => {
@@ -1435,7 +1435,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should allow parallel execution when all tools have executionMode=parallel", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		let firstResolved = false;
 		let parallelObserved = false;
 		let releaseFirst: (() => void) | undefined;
@@ -1508,7 +1508,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("runs finishTurn after tool-result messages and before turn_end", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
 			label: "Echo",
@@ -1617,7 +1617,7 @@ describe("agentLoop with AgentMessage", () => {
 	);
 
 	it("action:end skips queue polling and next-turn preparation", async () => {
-		const toolSchema = Type.Object({});
+		const toolSchema = obj({});
 		const tool: AgentTool<typeof toolSchema, undefined> = {
 			name: "noop",
 			label: "Noop",
@@ -1707,7 +1707,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("lets a natural tool-result request satisfy continuation", async () => {
-		const toolSchema = Type.Object({});
+		const toolSchema = obj({});
 		const tool: AgentTool<typeof toolSchema, undefined> = {
 			name: "noop",
 			label: "Noop",
@@ -1903,7 +1903,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should use prepareNextTurn snapshot before continuing", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
 			label: "Echo",
@@ -1980,7 +1980,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("picks up steering queued during prepareNextTurn before the next request", async () => {
-		const toolSchema = Type.Object({});
+		const toolSchema = obj({});
 		const tool: AgentTool<typeof toolSchema, undefined> = {
 			name: "noop",
 			label: "Noop",
@@ -2033,7 +2033,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("action:end receives finalized turn context and stops before queue polling", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executed: string[] = [];
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
@@ -2132,7 +2132,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should stop after a tool batch when every tool result sets terminate=true", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
 			label: "Echo",
@@ -2183,7 +2183,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should stop after a blocked tool call when beforeToolCall sets terminate=true", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		let executed = false;
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
@@ -2241,7 +2241,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should continue after a mixed batch with one terminating blocked call", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const executed: string[] = [];
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
@@ -2299,7 +2299,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should continue after parallel tool calls when not all tool results terminate", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
 			label: "Echo",
@@ -2364,7 +2364,7 @@ describe("agentLoop with AgentMessage", () => {
 	});
 
 	it("should allow afterToolCall to mark a tool batch as terminating", async () => {
-		const toolSchema = Type.Object({ value: Type.String() });
+		const toolSchema = obj({ value: str() });
 		const tool: AgentTool<typeof toolSchema, { value: string }> = {
 			name: "echo",
 			label: "Echo",
@@ -2533,13 +2533,13 @@ describe("agentLoopContinue with AgentMessage", () => {
 });
 
 describe("runToolCall", () => {
-	const echoSchema = Type.Object({ value: Type.String() });
+	const echoSchema = obj({ value: str() });
 	const echo: AgentTool<typeof echoSchema> = {
 		name: "echo",
 		label: "Echo",
 		description: "Echo tool",
 		parameters: echoSchema,
-		outputSchema: Type.Object({ value: Type.String() }),
+		outputSchema: obj({ value: str() }),
 		async execute(_toolCallId, params, _signal, onUpdate) {
 			onUpdate?.({ content: [{ type: "text", text: "partial" }], details: {} });
 			return {
@@ -2553,7 +2553,7 @@ describe("runToolCall", () => {
 		name: "failing",
 		label: "Failing",
 		description: "Returns an error result",
-		parameters: Type.Object({}),
+		parameters: obj({}),
 		async execute() {
 			return { content: [{ type: "text", text: "bad" }], details: { partial: true }, isError: true };
 		},

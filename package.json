@@ -4,17 +4,16 @@
 	"type": "module",
 	"workspaces": [
 		"packages/*",
+		"packages/chord/test/examples/61-tutorial",
 		"packages/coding-agent/examples/extensions/with-deps",
 		"packages/coding-agent/examples/extensions/custom-provider-anthropic",
-		"packages/coding-agent/examples/extensions/custom-provider-gitlab-duo",
-		"packages/coding-agent/examples/extensions/sandbox",
 		"packages/coding-agent/examples/extensions/gondolin"
 	],
 	"scripts": {
 		"clean": "bun run --workspaces --if-present clean",
-		"build": "cd packages/telemetry && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build && cd ../durable && bun run build && cd ../env && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build",
-		"build:pi": "cd packages/telemetry && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build",
-		"build:offline": "cd packages/telemetry && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../env && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build",
+		"build": "cd packages/telemetry && bun run build && cd ../schema && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build && cd ../durable && bun run build && cd ../env && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build",
+		"build:pi": "cd packages/telemetry && bun run build && cd ../schema && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build",
+		"build:offline": "cd packages/telemetry && bun run build && cd ../schema && bun run build && cd ../chord && bun run build && cd ../tui && bun run build && cd ../codemode && bun run build && cd ../mcp && bun run build && cd ../ai && bun run build:offline && cd ../durable && bun run build && cd ../env && bun run build && cd ../agent && bun run build && cd ../coding-agent && bun run build",
 		"build:native:darwin": "bun run --cwd packages/tui build:native:darwin",
 		"build:native:linux": "bun run --cwd packages/tui build:native:linux",
 		"build:native:win32": "bun run --cwd packages/tui build:native:win32",
@@ -53,17 +52,16 @@
 		"release:major": "bun scripts/release.mjs major",
 		"release:fix-links": "bun scripts/release-notes.mjs fix-github-releases",
 		"prepare": "husky",
-		"pack:packages": "bun scripts/pack-packages.mjs"
+		"pack:packages": "bun scripts/pack-packages.mjs",
+		"test:mcp-conformance": "bun packages/coding-agent/test/mcp-conformance/run.ts"
 	},
 	"devDependencies": {
-		"@anthropic-ai/sandbox-runtime": "0.0.26",
 		"@biomejs/biome": "2.3.5",
 		"@biomejs/wasm-nodejs": "2.3.5",
 		"@types/node": "22.19.19",
 		"chalk": "5.6.2",
 		"esbuild": "0.28.2",
 		"husky": "9.1.7",
-		"shx": "0.4.0",
 		"tsx": "4.22.1",
 		"typescript": "7.0.2",
 		"vitest": "4.1.12",

@@ -26,6 +26,7 @@ function walk(directory, stopAtPackages = false) {
 	if (!existsSync(directory)) return [];
 	const files = [];
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
+		if (directory === root && entry.name === "apps") continue;
 		if (entry.name === "sessions" || entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
 		const path = join(directory, entry.name);
 		if (entry.isDirectory()) {
@@ -53,7 +54,8 @@ function collectImports(file) {
 		const name = dependencyName(node.text);
 		if (name) imports.add(name);
 	};
-	const visit = (node) => {
+	const visit = (node, injectedRequire = false) => {
+		const shadowsRequire = injectedRequire || (node.parameters?.some((parameter) => is.isIdentifier(parameter.name) && parameter.name.text === "require") ?? false);
 		if (is.isImportDeclaration(node) || is.isExportDeclaration(node)) add(node.moduleSpecifier);
 		if (is.isImportTypeNode(node) && is.isLiteralTypeNode(node.argument)) add(node.argument.literal);
 		if (is.isImportEqualsDeclaration(node) && is.isExternalModuleReference(node.moduleReference)) {
@@ -61,7 +63,7 @@ function collectImports(file) {
 		}
 		if (is.isCallExpression(node)) {
 			if (node.expression.kind === SyntaxKind.ImportKeyword) add(node.arguments[0]);
-			if (is.isIdentifier(node.expression) && node.expression.text === "require") add(node.arguments[0]);
+			if (is.isIdentifier(node.expression) && node.expression.text === "require" && !shadowsRequire) add(node.arguments[0]);
 			if (
 				is.isPropertyAccessExpression(node.expression) &&
 				((is.isIdentifier(node.expression.expression) &&
@@ -74,7 +76,7 @@ function collectImports(file) {
 				add(node.arguments[0]);
 			}
 		}
-		node.forEachChild(visit);
+		node.forEachChild((child) => visit(child, shadowsRequire));
 	};
 	visit(source);
 	return imports;
@@ -95,8 +97,10 @@ const packageDirectories = [root];
 
 function collectPackageDirectories(directory) {
 	for (const entry of readdirSync(directory, { withFileTypes: true })) {
+		if (directory === root && entry.name === "apps") continue;
 		if (!entry.isDirectory() || entry.name === "node_modules" || entry.name === "dist" || entry.name === ".git") continue;
 		const path = join(directory, entry.name);
+		if (entry.name === "test") continue;
 		if (existsSync(join(path, "package.json"))) packageDirectories.push(path);
 		collectPackageDirectories(path);
 	}
@@ -107,10 +111,13 @@ const workspaceNames = new Set(
 	packageDirectories.map((directory) => JSON.parse(readFileSync(join(directory, "package.json"), "utf8")).name),
 );
 
+// Test examples import host APIs through the source aliases declared by the root project.
+const sourceAliases = new Set(Object.keys(JSON.parse(readFileSync(join(root, "tsconfig.json"), "utf8")).compilerOptions.paths).map(dependencyName));
+
 function checkFiles(files, allowed, context) {
 	for (const file of files) {
 		for (const dependency of collectImports(file)) {
-			if (!allowed.has(dependency)) failures.push(`${relative(root, file)} imports undeclared ${dependency} (${context})`);
+			if (!allowed.has(dependency) && !(file.includes(`${sep}test${sep}examples${sep}`) && sourceAliases.has(dependency))) failures.push(`${relative(root, file)} imports undeclared ${dependency} (${context})`);
 		}
 	}
 }
@@ -129,7 +136,7 @@ function runtimeSourceFiles(directory, packageJson, sourceFiles) {
 }
 
 const sourceConfigPath = resolve("tsconfig.check-declared-deps.json");
-const sourceConfig = JSON.stringify({ compilerOptions: { noResolve: true, noLib: true, types: [], allowJs: true }, files: walk(root).map((file) => resolve(file)) });
+const sourceConfig = JSON.stringify({ compilerOptions: { noResolve: true, noLib: true, types: [], allowJs: true }, files: [...new Set(packageDirectories.flatMap((directory) => walk(directory, true)))].map((file) => resolve(file)) });
 const buildConfigs = packageDirectories.map((directory) => resolve(directory, "tsconfig.build.json")).filter(existsSync);
 const api = new API({ cwd: root, fs: {
 	fileExists: (file) => resolve(file) === sourceConfigPath ? true : undefined,
