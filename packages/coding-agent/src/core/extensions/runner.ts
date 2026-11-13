@@ -20,6 +20,7 @@ import type { ScopedModel } from "../model-resolver.ts";
 import { DEFAULT_PRIVACY_MODE, type PrivacyMode } from "../privacy.ts";
 import type { PromptDocument } from "../prompt-templates.ts";
 import type { SessionManager } from "../session-manager.ts";
+import { resolveShellTimeout } from "../shell-timeout.ts";
 import type { SkillDocument } from "../skills.ts";
 import {
 	type BuildSystemPromptOptions,
@@ -404,6 +405,7 @@ export class ExtensionRunner {
 		normalizeBuildSystemPromptOptions({ cwd: this.cwd });
 	private executeToolFn: ExtensionContextActions["executeTool"];
 	private getCallableToolsFn: () => readonly AgentTool[] = () => [];
+	private getShellSettingsFn: NonNullable<ExtensionContextActions["getShellSettings"]> = () => ({});
 	/** Registered MCP servers already reported as unhandled. */
 	private readonly reportedMcpServers = new Set<string>();
 	private newSessionHandler: NewSessionHandler = async () => ({ cancelled: false });
@@ -483,6 +485,7 @@ export class ExtensionRunner {
 			contextActions.getSystemPromptOptions ?? (() => normalizeBuildSystemPromptOptions({ cwd: this.cwd }));
 		this.executeToolFn = contextActions.executeTool;
 		this.getCallableToolsFn = contextActions.getCallableTools ?? (() => []);
+		this.getShellSettingsFn = contextActions.getShellSettings ?? (() => ({}));
 
 		// Servers registered from now on reach the extension that connects them right away. Servers
 		// registered during loading are read on session_start.
@@ -1034,9 +1037,12 @@ export class ExtensionRunner {
 		// createContext() returns a fresh object, so adding properties does not affect other contexts.
 		return Object.defineProperties(this.createContext() as ExtensionToolContext, {
 			prepareBashLaunch: {
-				value: (event: BashLaunchEvent) => {
+				value: async (event: BashLaunchEvent) => {
 					runner.assertActive();
-					return runner.emitBashLaunch(event);
+					const timeout = resolveShellTimeout(event.timeout, runner.getShellSettingsFn());
+					const result = await runner.emitBashLaunch({ ...event, timeout });
+					if (result && "block" in result) return result;
+					return { timeout, ...result };
 				},
 			},
 			tools: {

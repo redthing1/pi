@@ -19,6 +19,7 @@
 
 ### Changed
 
+- Agent shell commands default to a two-minute timeout, configurable through global `shell` settings.
 - Shell tools use compact neutral panels with readable output, explicit outcomes and timing details. Completed calls omit their configured timeout.
 - Separate extension footer statuses with a dim divider while preserving their colors.
 - Native Bash and PowerShell tools stop commands after 32 MiB of captured output to bound temporary-file growth. Redirect larger output to an explicit file.

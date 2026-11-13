@@ -142,6 +142,8 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are requir
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `shellPath` | string | Platform default | Custom shell executable path. Supports a leading `~`. |
+| `shell.timeoutSeconds` | number | `120` | Default agent shell timeout in seconds. Global only. |
+| `shell.maxTimeoutSeconds` | number | `1800` | Maximum per-call timeout in seconds. Global only. |
 | `shellCommandPrefix` | string | None | Prefix prepended to every shell command. |
 
 See [Shell aliases](shell-aliases.md) for shell setup and [Pi Packages](packages.md) for package-manager behavior.

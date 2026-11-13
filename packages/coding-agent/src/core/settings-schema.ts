@@ -248,6 +248,19 @@ export const SettingsSchema = Type.Object(
 		externalEditor: Type.Optional(
 			Type.String({ description: "Command for Ctrl+G external editor; takes precedence over VISUAL and EDITOR." }),
 		),
+		shell: Type.Optional(
+			Type.Object(
+				{
+					timeoutSeconds: Type.Optional(
+						Type.Number({ exclusiveMinimum: 0, default: SETTINGS_DEFAULTS.shell.timeoutSeconds }),
+					),
+					maxTimeoutSeconds: Type.Optional(
+						Type.Number({ exclusiveMinimum: 0, default: SETTINGS_DEFAULTS.shell.maxTimeoutSeconds }),
+					),
+				},
+				{ description: "Agent shell execution limits in seconds. Global setting only." },
+			),
+		),
 		shellPath: Type.Optional(
 			Type.String({
 				description: "Custom shell path, for example for Cygwin on Windows, with support for leading ~ expansion.",
@@ -424,6 +437,7 @@ export const SettingsSchema = Type.Object(
 );
 
 type SettingsInput = Static<typeof SettingsSchema>;
+export type ShellSettings = NonNullable<SettingsInput["shell"]>;
 
 export interface CompactionModelOverride extends Static<typeof CompactionModelOverrideSchema> {}
 export interface CompactionSettings extends Static<typeof CompactionSettingsSchema> {}

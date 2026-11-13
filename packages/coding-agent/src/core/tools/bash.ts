@@ -14,6 +14,8 @@ import {
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
 import type { BashLaunchEvent, ExtensionContext, ExtensionToolContext, ToolDefinition } from "../extensions/types.ts";
+import type { ShellSettings } from "../settings-schema.ts";
+import { resolveShellTimeout } from "../shell-timeout.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { BASH_UPDATE_THROTTLE_MS, createShellRenderers } from "./renderers/bash.ts";
 import { wrapToolDefinition } from "./tool-definition-wrapper.ts";
@@ -41,7 +43,11 @@ function resolveTimeoutMs(timeout: number | undefined): number | undefined {
 
 const bashSchema = Type.Object({
 	command: Type.String({ description: "Shell command to execute" }),
-	timeout: Type.Optional(Type.Number({ description: "Timeout in seconds (optional, no default timeout)" })),
+	timeout: Type.Optional(
+		Type.Number({
+			description: "Execution timeout in seconds. Uses the configured default and maximum.",
+		}),
+	),
 });
 
 export const bashToolSystemPromptContribution = {
@@ -155,8 +161,10 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 			if (child.pid) trackDetachedChildPid(child.pid);
 			let timedOut = false;
 			let timeoutHandle: NodeJS.Timeout | undefined;
+			const stopping = new AbortController();
 			const onAbort = () => {
 				if (child.pid) killProcessTree(child.pid);
+				stopping.abort();
 			};
 
 			try {
@@ -164,7 +172,7 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 				if (timeoutMs !== undefined) {
 					timeoutHandle = setTimeout(() => {
 						timedOut = true;
-						if (child.pid) killProcessTree(child.pid);
+						onAbort();
 					}, timeoutMs);
 				}
 				// Stream stdout and stderr.
@@ -177,7 +185,7 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 				}
 				// Handle shell spawn errors and wait for the process to terminate without hanging
 				// on inherited stdio handles held by detached descendants.
-				const exitCode = await waitForChildProcess(child);
+				const exitCode = await waitForChildProcess(child, stopping.signal);
 				if (signal?.aborted) {
 					throw new Error("aborted");
 				}
@@ -189,7 +197,11 @@ export function createLocalShellOperations(shellName: string, resolveShellConfig
 				const signalCode = child.signalCode;
 				return { exitCode: exitCode ?? (signalCode ? 128 + (osConstants.signals[signalCode] ?? 0) : 1) };
 			} finally {
-				if (child.pid) untrackDetachedChildPid(child.pid);
+				if (child.pid) {
+					const pid = child.pid;
+					if (child.exitCode !== null || child.signalCode !== null) untrackDetachedChildPid(pid);
+					else child.once("exit", () => untrackDetachedChildPid(pid));
+				}
 				if (timeoutHandle) clearTimeout(timeoutHandle);
 				if (signal) signal.removeEventListener("abort", onAbort);
 			}
@@ -244,6 +256,8 @@ function resolveSpawnContext(
 }
 
 export interface BashToolOptions {
+	/** Standalone execution limits. Sessions use global shell settings. */
+	timeoutPolicy?: ShellSettings;
 	/** Custom operations for command execution. Default: local shell */
 	operations?: BashOperations;
 	/** Command prefix prepended to every command (for example shell setup commands) */
@@ -295,7 +309,7 @@ export function createShellToolDefinition(
 		constrainedSampling: { type: "json_schema", strict: "prefer" },
 		async execute(
 			_toolCallId,
-			{ command, timeout }: { command: string; timeout?: number },
+			{ command, timeout: requestedTimeout }: { command: string; timeout?: number },
 			signal?: AbortSignal,
 			onUpdate?,
 			ctx?: ExtensionToolContext,
@@ -318,12 +332,13 @@ export function createShellToolDefinition(
 					submittedCommand: command,
 					command: spawnContext.command,
 					...executionContext,
-					timeout,
+					timeout: requestedTimeout,
 					operationsKind,
 					shellPath: operationsKind === "local" ? options?.shellPath : undefined,
 				}),
 			);
 			if (launchResult && "block" in launchResult) throw new Error(launchResult.reason);
+			const timeout = launchResult?.timeout ?? resolveShellTimeout(requestedTimeout, options?.timeoutPolicy);
 			const launchOperations = launchResult?.operations ?? ops;
 			const output = new OutputAccumulator({
 				tempFilePrefix: config.tempFilePrefix,
@@ -439,8 +454,12 @@ export function createShellToolDefinition(
 
 			const appendStatus = (text: string, status: string) =>
 				text ? `${text.replace(/\r?\n$/, "")}\n\n${status}` : status;
-			const failure = (snapshot: Awaited<ReturnType<typeof finishOutput>>, diagnostic: string) => {
-				const { text, details } = formatOutput(snapshot, "");
+			const failure = (
+				snapshot: Awaited<ReturnType<typeof finishOutput>>,
+				diagnostic: string,
+				fullOutputPath?: string,
+			) => {
+				const { text, details } = formatOutput(snapshot, "", fullOutputPath);
 				return new ShellExecutionError(
 					appendStatus(text, diagnostic),
 					snapshot.content,
@@ -464,15 +483,21 @@ export function createShellToolDefinition(
 					operationFullOutputPath = result.fullOutputPath;
 				} catch (err) {
 					const snapshot = await finishOutput();
+					const fullOutputPath = err instanceof ShellExecutionError ? err.fullOutputPath : undefined;
 					if (captureError) throw failure(snapshot, captureError);
 					if (err instanceof Error && err.message === "aborted") {
-						throw failure(snapshot, typeof signal?.reason === "string" ? signal.reason : "Command aborted");
+						throw failure(
+							snapshot,
+							typeof signal?.reason === "string" ? signal.reason : "Command aborted",
+							fullOutputPath,
+						);
 					}
 					if (err instanceof Error && err.message.startsWith("timeout:")) {
 						const timeoutSecs = err.message.split(":")[1];
-						throw failure(snapshot, `Command timed out after ${timeoutSecs} seconds`);
+						const unit = Number(timeoutSecs) === 1 ? "second" : "seconds";
+						throw failure(snapshot, `Command timed out after ${timeoutSecs} ${unit}`, fullOutputPath);
 					}
-					throw err;
+					throw failure(snapshot, err instanceof Error ? err.message : String(err), fullOutputPath);
 				}
 
 				const snapshot = await finishOutput();

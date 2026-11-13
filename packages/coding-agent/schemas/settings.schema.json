@@ -205,6 +205,22 @@
       "type": "string",
       "description": "Command for Ctrl+G external editor; takes precedence over VISUAL and EDITOR."
     },
+    "shell": {
+      "type": "object",
+      "properties": {
+        "timeoutSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 120
+        },
+        "maxTimeoutSeconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1800
+        }
+      },
+      "description": "Agent shell execution limits in seconds. Global setting only."
+    },
     "shellPath": {
       "type": "string",
       "description": "Custom shell path, for example for Cygwin on Windows, with support for leading ~ expansion."

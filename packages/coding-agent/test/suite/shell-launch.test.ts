@@ -15,6 +15,53 @@ describe("session shell launch boundary", () => {
 		for (const harness of harnesses.splice(0)) harness.cleanup();
 	});
 
+	it.each(["bash", "powershell"] as const)(
+		"resolves operator limits before guards for replacement %s tools",
+		async (name) => {
+			const exec = vi.fn(async () => ({ exitCode: 0 }));
+			const launches: BashLaunchEvent[] = [];
+			const harness = await createHarness({
+				settings: { shell: { timeoutSeconds: 10, maxTimeoutSeconds: 20 } },
+				extensionFactories: [
+					(pi) => {
+						const create = name === "bash" ? createBashToolDefinition : createPowerShellToolDefinition;
+						pi.registerTool(create("/", { operations: { context: destination, exec } }));
+						pi.on("session_start", () => pi.setActiveTools([name]));
+						pi.on("bash_launch", (event) => {
+							launches.push(event);
+						});
+					},
+				],
+			});
+			harnesses.push(harness);
+			for (const timeout of [undefined, 15, 21]) {
+				harness.setResponses([
+					fauxAssistantMessage(
+						[fauxToolCall(name, { command: "synthetic", ...(timeout === undefined ? {} : { timeout }) })],
+						{ stopReason: "toolUse" },
+					),
+					fauxAssistantMessage("done"),
+				]);
+				await harness.session.prompt("Run synthetic shell work.");
+			}
+			expect(launches.map((event) => event.timeout)).toEqual([10, 15]);
+			expect(exec).toHaveBeenCalledTimes(2);
+			expect(exec).toHaveBeenNthCalledWith(
+				1,
+				"synthetic",
+				destination.cwd,
+				expect.objectContaining({ timeout: 10 }),
+			);
+			expect(exec).toHaveBeenNthCalledWith(
+				2,
+				"synthetic",
+				destination.cwd,
+				expect.objectContaining({ timeout: 15 }),
+			);
+			expect(getToolResult(harness, name).isError).toBe(true);
+		},
+	);
+
 	it.each(["bash", "powershell", "sdk"] as const)(
 		"guards %s tools before dispatch with destination identity",
 		async (kind) => {

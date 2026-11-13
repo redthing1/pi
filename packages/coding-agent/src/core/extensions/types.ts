@@ -416,8 +416,10 @@ export interface ExecuteToolOptions {
  * created with `createBashTool()` and run in a plain `Agent` or called directly, gets no context.
  */
 export interface ExtensionToolContext extends ExtensionContext {
-	/** Run the session's final shell launch guards, including for extension-backed shell tools. */
-	prepareBashLaunch(event: BashLaunchEvent): Promise<BashLaunchEventResult | undefined>;
+	/** Resolve the shell timeout and run the session's final launch guards. */
+	prepareBashLaunch(
+		event: BashLaunchEvent,
+	): Promise<{ block: true; reason: string } | { timeout: number; operations?: BashOperations }>;
 	/** Tools {@link executeTool} can call. */
 	readonly tools: readonly AgentTool[];
 	/**
@@ -1238,7 +1240,7 @@ export interface BashLaunchEvent {
 	readonly cwd: string;
 	readonly home: string;
 	readonly pathStyle: "posix" | "win32";
-	/** Timeout in seconds, when the caller supplied one. */
+	/** Effective timeout in seconds. Direct human shell commands may omit it. */
 	readonly timeout?: number;
 	/** Whether Pi selected its local backend or caller-provided operations. */
 	readonly operationsKind: "local" | "custom";
@@ -2342,6 +2344,7 @@ export interface ExtensionActions {
  * Required by all modes.
  */
 export interface ExtensionContextActions {
+	getShellSettings?: () => NonNullable<Settings["shell"]>;
 	/** Command-only session operation, bound by AgentSession. */
 	editCompactionSummary?: ExtensionCommandContext["editCompactionSummary"];
 	writeOutputFile?: ExtensionContext["writeOutputFile"];

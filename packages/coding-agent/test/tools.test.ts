@@ -776,7 +776,7 @@ describe("Coding Agent Tools", () => {
 			const context = fakeCtx(testDir);
 			context.prepareBashLaunch = async (event) => {
 				launch = event;
-				return { operations: replacement };
+				return { timeout: 7, operations: replacement };
 			};
 			const result = await guarded.execute(
 				"launch-call",
@@ -1133,7 +1133,7 @@ describe("Coding Agent Tools", () => {
 
 function fakeCtx(cwd: string): ExtensionToolContext {
 	const context = { cwd } as ExtensionToolContext;
-	context.prepareBashLaunch = async () => undefined;
+	context.prepareBashLaunch = async () => ({ timeout: 120 });
 	return context;
 }
 

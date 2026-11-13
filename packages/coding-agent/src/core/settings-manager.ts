@@ -41,6 +41,7 @@ export type {
 	QuietStartup,
 	RetrySettings,
 	Settings,
+	ShellSettings,
 	TerminalSettings,
 	ThinkingBudgetsSettings,
 	TransportSetting,
@@ -468,6 +469,11 @@ export class SettingsManager {
 
 	getGlobalSettings(): Settings {
 		return structuredClone(this.globalSettings);
+	}
+
+	/** Global shell execution limits. */
+	getShellSettings(): NonNullable<Settings["shell"]> {
+		return this.globalSettings.shell === undefined ? {} : structuredClone(this.globalSettings.shell);
 	}
 
 	getProjectSettings(): Settings {

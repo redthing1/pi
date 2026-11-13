@@ -14,6 +14,7 @@ import type { Readable } from "node:stream";
 import crossSpawn from "cross-spawn";
 
 const EXIT_STDIO_GRACE_MS = 100;
+const TERMINATION_GRACE_MS = 5000;
 
 export function spawnProcess(
 	command: string,
@@ -46,16 +47,19 @@ export function spawnProcessSync(
  * us reading, while a quiet inherited handle (e.g. a Windows daemonized descendant
  * that never lets `close` fire) still releases us after the grace elapses.
  */
-export function waitForChildProcess(child: ChildProcess): Promise<number | null> {
+export function waitForChildProcess(child: ChildProcess, stopping?: AbortSignal): Promise<number | null> {
 	return new Promise((resolve, reject) => {
 		let settled = false;
 		let exited = false;
 		let exitCode: number | null = null;
 		let postExitTimer: NodeJS.Timeout | undefined;
+		let terminationTimer: NodeJS.Timeout | undefined;
 		let stdoutEnded = child.stdout === null;
 		let stderrEnded = child.stderr === null;
 
 		const cleanup = () => {
+			if (terminationTimer) clearTimeout(terminationTimer);
+			stopping?.removeEventListener("abort", onStopping);
 			if (postExitTimer) {
 				clearTimeout(postExitTimer);
 				postExitTimer = undefined;
@@ -126,6 +130,18 @@ export function waitForChildProcess(child: ChildProcess): Promise<number | null>
 			finalize(code);
 		};
 
+		const onStopping = () => {
+			if (settled || terminationTimer) return;
+			terminationTimer = setTimeout(() => {
+				if (exited) finalize(exitCode);
+				else {
+					child.stdout?.destroy();
+					child.stderr?.destroy();
+					onError(new Error("Command termination could not be confirmed"));
+				}
+			}, TERMINATION_GRACE_MS);
+		};
+
 		child.stdout?.once("end", onStdoutEnd);
 		child.stderr?.once("end", onStderrEnd);
 		child.stdout?.on("data", onData);
@@ -133,5 +149,7 @@ export function waitForChildProcess(child: ChildProcess): Promise<number | null>
 		child.once("error", onError);
 		child.once("exit", onExit);
 		child.once("close", onClose);
+		if (stopping?.aborted) onStopping();
+		else stopping?.addEventListener("abort", onStopping, { once: true });
 	});
 }

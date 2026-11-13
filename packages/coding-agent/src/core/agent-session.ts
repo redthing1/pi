@@ -4112,6 +4112,7 @@ export class AgentSession {
 				writeOutputFile: async (prefix, extension, data) =>
 					(await runner.emitOutputFile({ type: "output_file", prefix, extension, data })) ??
 					writeOutputFile(prefix, extension, data, this._temporaryOutputDirectory),
+				getShellSettings: () => this.settingsManager.getShellSettings(),
 				refreshResources: () => this.extendResourcesFromExtensions("refresh"),
 				editCompactionSummary: (entryId, summary) => this.editCompactionSummary(entryId, summary),
 				getModel: () => this.model,

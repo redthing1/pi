@@ -333,6 +333,7 @@ export {
 	type RetrySettings,
 	SettingsManager,
 	type SettingsManagerCreateOptions,
+	type ShellSettings,
 	type TuiMode,
 } from "./core/settings-manager.ts";
 // Skills

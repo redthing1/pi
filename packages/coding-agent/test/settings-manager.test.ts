@@ -26,6 +26,18 @@ describe("SettingsManager", () => {
 	});
 
 	describe("preserves externally added settings", () => {
+		it("keeps shell execution limits owned by global settings", () => {
+			writeFileSync(
+				join(agentDir, "settings.json"),
+				JSON.stringify({ shell: { timeoutSeconds: 10, maxTimeoutSeconds: 20 } }),
+			);
+			writeFileSync(
+				join(projectDir, ".pi", "settings.json"),
+				JSON.stringify({ shell: { timeoutSeconds: 900, maxTimeoutSeconds: 3600 } }),
+			);
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getShellSettings()).toEqual({ timeoutSeconds: 10, maxTimeoutSeconds: 20 });
+		});
 		it("should track last selected model per provider", async () => {
 			const settingsPath = join(agentDir, "settings.json");
 			writeFileSync(
