@@ -758,6 +758,9 @@ pi.on("turn_end", async (event, ctx) => {
 
 `turn_end` runs after the assistant and tool-result messages have been persisted and before the low-level `turn_end` event. Retry backoff and final-attempt recovery still happen after `agent_end`, preserving their existing lifecycle and queue ordering; `agent_before_settle` sees the repaired projection after that work completes. Boundary handlers run in extension load and registration order. Each handler sees prior proposals in `event.entries` and sees `event.context` rebuilt from them. Returning `entries` or `continue` replaces only that field; omitted fields preserve the current proposal. Allowed draft entry types are `custom`, `custom_message`, `context_edit`, and `compaction`. The complete proposal is validated before it is appended in list order after all handlers finish; a handler error is reported and later handlers still run. Validation prevents partially applied semantic errors, but persistence is not transactional.
 
+Return `onCommitted` to acknowledge contributed entries after they are appended.
+The callback runs only if later handlers retain those entries.
+
 `continue: true` ensures one next provider request for that boundary invocation. If tool results, steering, or a follow-up already cause that request, they satisfy the decision and no additional request is made; otherwise Pi makes one context-only request. Error and aborted responses remain hard exits. `continue: false` never suppresses natural work. Guard continuation conditions: an unconditional `continue: true` is evaluated again after the next response and can create an endless loop. A `custom_message` draft contributes a user-role model message but is extension-authored: it does not run human input hooks, slash commands, skills, or prompt templates.
 
 Host integrations that construct `TurnEndEvent` values must provide `messageEntryId`, `toolResultEntryIds`, `outcome`, `entries`, `continue`, and `context`. `ExtensionEvent` exhaustive switches must also handle `agent_before_settle`. `ExtensionRunner.emit()` excludes actionable turn boundaries; dispatch `turn_end` and `agent_before_settle` through `emitBoundary(baseEvent, buildContext)` so handlers receive chained previews. Other dedicated runner methods still return results for events such as `session_before_*`.
@@ -1287,6 +1290,20 @@ pi.on("tool_call", (event, ctx) => {
 });
 ```
 
+### ctx.foreground
+
+`ctx.foreground.wait({ ready, subscribe, signal, timeoutMs?, passive? })` waits for
+a condition with automatic subscription cleanup. It returns `ready`, `timeout`,
+`released`, `steering`, or `aborted`. Passive waits share a 30-second allowance per
+run; `passive: false` gives an executing operation its own bounded foreground wait.
+`ctx.foreground.release()` releases all current waits without stopping their work.
+Extensions retain ownership of execution and cancellation.
+
+### ctx.onResultCommitted(callback)
+
+In a tool, register a callback that runs after its result is appended to the
+transcript. Use it to acknowledge delivered results.
+
 ### ctx.getContextUsage()
 
 Returns current context usage for the active model. Uses last assistant usage when available, then estimates tokens for trailing messages.
@@ -1660,6 +1677,9 @@ pi.sendMessage({
   - `"nextTurn"` - Queued for next user prompt. Does not interrupt or trigger anything.
 - `triggerTurn: true` - If agent is idle, trigger an LLM response immediately. Only applies to `"steer"` and `"followUp"` modes (ignored for `"nextTurn"`). Without it, an idle session stores the message without starting a turn.
 - `triggerTurn: false` while streaming - The message is not steered or queued as a follow-up; it is appended after the current turn ends.
+
+Pass `onDelivered` in the options to acknowledge the message after it is appended
+to the transcript.
 
 ### pi.sendUserMessage(content, options?)
 

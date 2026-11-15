@@ -2291,6 +2291,7 @@ export class InteractiveMode {
 
 		// Create a context for shortcut handlers
 		const createContext = (): ExtensionContext => ({
+			foreground: extensionRunner.createContext().foreground,
 			refreshResources: () => extensionRunner.createContext().refreshResources(),
 			writeOutputFile: (prefix, extension, data) =>
 				extensionRunner.createContext().writeOutputFile(prefix, extension, data),

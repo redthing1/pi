@@ -64,6 +64,7 @@ import type { CompactionPreparation, CompactionResult } from "../compaction/inde
 import type { EventBus } from "../event-bus.ts";
 import type { ExecOptions, ExecResult } from "../exec.ts";
 import type { ReadonlyFooterDataProvider } from "../footer-data-provider.ts";
+import type { ForegroundControl } from "../foreground.ts";
 import type { KeybindingsManager } from "../keybindings.ts";
 import type { McpServerConfig, McpServerRegistry, RegisteredMcpServer } from "../mcp-servers.ts";
 import type { CustomMessage } from "../messages.ts";
@@ -371,6 +372,8 @@ export interface OutputFileEventResult {
 }
 
 export interface ExtensionContext {
+	/** Session-owned foreground waits and user release. */
+	readonly foreground: ForegroundControl;
 	/** UI methods for user interaction */
 	ui: ExtensionUIContext;
 	/** Save full tool output in session-owned storage. An extension may return an opaque reference with its own reader. */
@@ -437,6 +440,8 @@ export interface ExecuteToolOptions {
  * created with `createBashTool()` and run in a plain `Agent` or called directly, gets no context.
  */
 export interface ExtensionToolContext extends ExtensionContext {
+	/** Called after this tool result is accepted into the transcript. */
+	onResultCommitted(callback: () => void): void;
 	/** Resolve the shell timeout and run the session's final launch guards. */
 	prepareBashLaunch(
 		event: BashLaunchEvent,
@@ -502,7 +507,7 @@ export interface ExtensionCommandContext extends ExtensionContext {
 export interface ReplacedSessionContext extends ExtensionCommandContext {
 	sendMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+		options?: SendMessageOptions,
 	): Promise<void>;
 
 	sendUserMessage(
@@ -1103,6 +1108,8 @@ export interface BoundaryState {
 }
 
 export interface BoundaryResult {
+	/** Called after this handler’s contributed entries are committed, if they remain in the boundary. */
+	onCommitted?: () => void;
 	entries?: SessionBoundaryDraft[];
 	continue?: boolean;
 }
@@ -1903,7 +1910,7 @@ export interface ExtensionAPI {
 	/** Send a custom message to the session. */
 	sendMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+		options?: SendMessageOptions,
 	): void;
 
 	/**
@@ -2280,9 +2287,16 @@ export interface ExtensionShortcut {
 
 type HandlerFn = (...args: unknown[]) => Promise<unknown>;
 
+export interface SendMessageOptions {
+	triggerTurn?: boolean;
+	deliverAs?: "steer" | "followUp" | "nextTurn";
+	/** Called after the message is appended to the transcript. */
+	onDelivered?: () => void;
+}
+
 export type SendMessageHandler = <T = unknown>(
 	message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-	options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+	options?: SendMessageOptions,
 ) => void;
 
 export type SendUserMessageHandler = (
@@ -2389,6 +2403,8 @@ export interface ExtensionActions {
  * Required by all modes.
  */
 export interface ExtensionContextActions {
+	foreground?: ForegroundControl;
+	onToolResultCommitted?: (toolCallId: string, callback: () => void) => void;
 	getShellSettings?: () => NonNullable<Settings["shell"]>;
 	/** Command-only session operation, bound by AgentSession. */
 	editCompactionSummary?: ExtensionCommandContext["editCompactionSummary"];

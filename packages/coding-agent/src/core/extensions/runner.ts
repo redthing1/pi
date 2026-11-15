@@ -14,6 +14,7 @@ import type { KeyId } from "@earendil-works/pi-tui";
 import { type Theme, theme } from "../../modes/interactive/theme/theme.ts";
 import type { CacheWarmingAction } from "../cache-warmer.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
+import { type ForegroundControl, ForegroundController } from "../foreground.ts";
 import type { KeybindingsConfig } from "../keybindings.ts";
 import type { ModelRegistry } from "../model-registry.ts";
 import type { ScopedModel } from "../model-resolver.ts";
@@ -239,6 +240,7 @@ type BoundaryBaseEvent =
 	| Omit<AgentBeforeSettleEvent, "entries" | "continue" | "context">;
 
 interface BoundaryDispatchResult {
+	onCommitted: Array<() => void>;
 	entries: SessionBoundaryDraft[];
 	continue: boolean;
 	context: BoundaryContextPreview;
@@ -387,6 +389,8 @@ export class ExtensionRunner {
 	private getScopedModels: () => readonly ScopedModel[] = () => [];
 	private isIdleFn: () => boolean = () => true;
 	private isProjectTrustedFn: () => boolean = () => true;
+	private foreground: ForegroundControl = new ForegroundController();
+	private onToolResultCommitted: NonNullable<ExtensionContextActions["onToolResultCommitted"]> = () => {};
 	private getSignalFn: () => AbortSignal | undefined = () => undefined;
 	private waitForIdleFn: () => Promise<void> = async () => {};
 	private abortFn: () => void = () => {};
@@ -474,6 +478,8 @@ export class ExtensionRunner {
 		this.isIdleFn = contextActions.isIdle;
 		this.isProjectTrustedFn = contextActions.isProjectTrusted;
 		this.getSignalFn = contextActions.getSignal;
+		if (contextActions.foreground) this.foreground = contextActions.foreground;
+		if (contextActions.onToolResultCommitted) this.onToolResultCommitted = contextActions.onToolResultCommitted;
 		this.abortFn = contextActions.abort;
 		this.hasPendingMessagesFn = contextActions.hasPendingMessages;
 		this.shutdownHandler = contextActions.shutdown;
@@ -944,6 +950,10 @@ export class ExtensionRunner {
 		const getModel = this.getModel;
 		const getScopedModels = this.getScopedModels;
 		return {
+			get foreground() {
+				runner.assertActive();
+				return runner.foreground;
+			},
 			get ui() {
 				runner.assertActive();
 				return runner.uiContext;
@@ -1043,6 +1053,12 @@ export class ExtensionRunner {
 		const runner = this;
 		// createContext() returns a fresh object, so adding properties does not affect other contexts.
 		return Object.defineProperties(this.createContext() as ExtensionToolContext, {
+			onResultCommitted: {
+				value: (callback: () => void) => {
+					runner.assertActive();
+					runner.onToolResultCommitted(toolCallId, callback);
+				},
+			},
 			prepareBashLaunch: {
 				value: async (event: BashLaunchEvent) => {
 					runner.assertActive();
@@ -1123,6 +1139,7 @@ export class ExtensionRunner {
 	): Promise<BoundaryDispatchResult> {
 		const ctx = this.createContext();
 		let entries: SessionBoundaryDraft[] = [];
+		const receipts: Array<{ entries: SessionBoundaryDraft[]; commit: () => void }> = [];
 		let shouldContinue = false;
 		let context = await buildContext(entries);
 		let valid = true;
@@ -1137,6 +1154,11 @@ export class ExtensionRunner {
 				} as TurnEndEvent | AgentBeforeSettleEvent;
 				try {
 					const handlerResult = (await handler(event, ctx)) as BoundaryResult | undefined;
+					if (handlerResult?.onCommitted && handlerResult.entries?.length)
+						receipts.push({
+							entries: handlerResult.entries.filter((entry) => !entries.includes(entry)),
+							commit: handlerResult.onCommitted,
+						});
 					if (handlerResult?.entries !== undefined) entries = handlerResult.entries;
 					if (handlerResult?.continue !== undefined) shouldContinue = handlerResult.continue;
 				} catch (err) {
@@ -1164,8 +1186,19 @@ export class ExtensionRunner {
 		}
 
 		return valid
-			? { entries, continue: shouldContinue, context, valid: true }
-			: { entries: [], continue: false, context, valid: false };
+			? {
+					entries,
+					continue: shouldContinue,
+					context,
+					valid: true,
+					onCommitted: receipts
+						.filter(
+							(receipt) =>
+								receipt.entries.length > 0 && receipt.entries.every((entry) => entries.includes(entry)),
+						)
+						.map((receipt) => receipt.commit),
+				}
+			: { entries: [], continue: false, context, valid: false, onCommitted: [] };
 	}
 
 	private isSessionBeforeEvent(event: RunnerEmitEvent): event is SessionBeforeEvent {

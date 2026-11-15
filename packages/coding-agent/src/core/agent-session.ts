@@ -1,4 +1,3 @@
-import { writeOutputFile } from "../utils/output-files.ts";
 /**
  * AgentSession - Core abstraction for agent lifecycle and session management.
  *
@@ -71,6 +70,7 @@ import {
 import { getThemeByName, theme } from "../modes/interactive/theme/theme.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { processImage } from "../utils/image-process.ts";
+import { writeOutputFile } from "../utils/output-files.ts";
 import { sleep } from "../utils/sleep.ts";
 import { normalizeToolResultImages } from "../utils/tool-result-images.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
@@ -112,6 +112,7 @@ import {
 	type MessageStartEvent,
 	type MessageUpdateEvent,
 	type ReplacedSessionContext,
+	type SendMessageOptions,
 	type SessionBeforeCompactResult,
 	type SessionBeforeTreeResult,
 	type SessionBoundaryDraft,
@@ -131,6 +132,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { type BeforeAgentStartTrigger, emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { ForegroundController } from "./foreground.ts";
 import { createToolNameMatcher, isMcpToolName } from "./mcp-servers.ts";
 import { type BashExecutionMessage, type CustomMessage, convertToLlm, type SkillInvocation } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
@@ -484,6 +486,9 @@ export class AgentSession {
 	readonly agent: Agent;
 	readonly sessionManager: SessionManager;
 	readonly settingsManager: SettingsManager;
+	private readonly _foreground = new ForegroundController();
+	private readonly _toolResultReceipts = new Map<string, Array<() => void>>();
+	private readonly _messageReceipts = new WeakMap<object, () => void>();
 
 	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	private _providerScope?: string;
@@ -1024,7 +1029,7 @@ export class AgentSession {
 			},
 			(entries) => this._buildBoundaryContext(entries, "turn_end"),
 		);
-		this._commitBoundaryDrafts(boundary.entries);
+		this._commitBoundaryDrafts(boundary.entries, boundary.onCommitted);
 		if (boundary.continue && !this._buildBoundaryContext([], "turn_end").canContinue) {
 			this._reportInvalidBoundaryContinuation("turn_end");
 			return false;
@@ -1509,10 +1514,19 @@ export class AgentSession {
 		};
 	}
 
-	private _commitBoundaryDrafts(drafts: SessionBoundaryDraft[]): void {
+	private _commitBoundaryDrafts(drafts: SessionBoundaryDraft[], receipts: Array<() => void> = []): void {
 		const appended = this._applyBoundaryDrafts(this.sessionManager, drafts);
 		this._refreshFinalizedContext();
 		for (const entry of appended) this._emit({ type: "entry_appended", entry });
+		for (const receipt of receipts) this._acceptDelivery(receipt);
+	}
+
+	private _acceptDelivery(receipt: () => void): void {
+		try {
+			receipt();
+		} catch (error) {
+			this._extensionRunner.emitError({ extensionPath: "<runtime>", event: "delivery", error: String(error) });
+		}
 	}
 
 	private _reportInvalidBoundaryContinuation(event: "turn_end" | "agent_before_settle"): void {
@@ -1566,6 +1580,7 @@ export class AgentSession {
 	private async _emitAgentSettled(): Promise<void> {
 		this._cacheWarmer?.onAgentSettled();
 		this._isAgentRunActive = false;
+		this._toolResultReceipts.clear();
 		this._isEmittingAgentSettled = true;
 		try {
 			const aborted = this._agentRunAbortRequested;
@@ -1614,12 +1629,14 @@ export class AgentSession {
 			const steeringIndex = this._steeringMessages.indexOf(messageText);
 			if (steeringIndex !== -1) {
 				this._steeringMessages.splice(steeringIndex, 1);
+				this._foreground.begin();
 				this._emitQueueUpdate();
 			} else {
 				// Check follow-up queue
 				const followUpIndex = this._followUpMessages.indexOf(event.message);
 				if (followUpIndex !== -1) {
 					this._followUpMessages.splice(followUpIndex, 1);
+					this._foreground.begin();
 					this._emitQueueUpdate();
 				}
 			}
@@ -1656,7 +1673,17 @@ export class AgentSession {
 				// Regular LLM message - persist as SessionMessageEntry
 				entryId = this.sessionManager.appendMessage(event.message);
 			}
-			if (entryId) this._entryIdsByMessage.set(event.message, entryId);
+			if (entryId) {
+				this._entryIdsByMessage.set(event.message, entryId);
+				if (event.message.role === "toolResult") {
+					const receipts = this._toolResultReceipts.get(event.message.toolCallId) ?? [];
+					this._toolResultReceipts.delete(event.message.toolCallId);
+					for (const receipt of receipts) this._acceptDelivery(receipt);
+				}
+				const receipt = this._messageReceipts.get(event.message);
+				this._messageReceipts.delete(event.message);
+				if (receipt) this._acceptDelivery(receipt);
+			}
 			// Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
 
 			// Track the assistant message used by post-run retry and overflow handling.
@@ -2423,6 +2450,7 @@ export class AgentSession {
 		skillInvocations: SkillInvocation[] = [],
 	): Promise<void> {
 		this._isAgentRunActive = true;
+		this._foreground.begin();
 		this._agentRunAbortRequested = false;
 		this._agentRunAbortReason = undefined;
 		let messages: AgentMessage[];
@@ -2591,7 +2619,7 @@ export class AgentSession {
 				{ type: "agent_before_settle", outcome: this._lastActivityOutcome },
 				(entries) => this._buildBoundaryContext(entries, "agent_before_settle"),
 			);
-			this._commitBoundaryDrafts(result.entries);
+			this._commitBoundaryDrafts(result.entries, result.onCommitted);
 			this._flushPendingCustomMessages();
 			const finalContext = this._buildBoundaryContext([], "agent_before_settle");
 			if (this._abortDuringBeforeSettle) return false;
@@ -2966,6 +2994,7 @@ export class AgentSession {
 		skillInvocations: SkillInvocation[] = [],
 	): Promise<void> {
 		this._steeringMessages.push(text);
+		this._foreground.steer();
 		this._emitQueueUpdate();
 		const content: (TextContent | ImageContent)[] = [{ type: "text", text }];
 		if (images) {
@@ -3050,7 +3079,7 @@ export class AgentSession {
 	 */
 	async sendCustomMessage<T = unknown>(
 		message: Pick<CustomMessage<T>, "customType" | "content" | "display" | "details">,
-		options?: { triggerTurn?: boolean; deliverAs?: "steer" | "followUp" | "nextTurn" },
+		options?: SendMessageOptions,
 	): Promise<void> {
 		const appMessage = {
 			role: "custom" as const,
@@ -3061,6 +3090,7 @@ export class AgentSession {
 			details: message.details,
 			timestamp: Date.now(),
 		} satisfies CustomMessage<T>;
+		if (options?.onDelivered) this._messageReceipts.set(appMessage, options.onDelivered);
 		if (options?.deliverAs === "nextTurn") {
 			this._pendingNextTurnMessages.push(appMessage);
 		} else if (this.isStreaming && options?.triggerTurn !== false) {
@@ -3071,7 +3101,9 @@ export class AgentSession {
 			}
 		} else if (options?.triggerTurn) {
 			if (this._isEmittingAgentSettled) {
-				this._deferredSettledActions.push(async () => await this.sendCustomMessage(message, options));
+				this._deferredSettledActions.push(async () => {
+					await this._startRun({ messageType: "custom", message: appMessage });
+				});
 				return;
 			}
 			await this._startRun({ messageType: "custom", message: appMessage });
@@ -3094,6 +3126,9 @@ export class AgentSession {
 			appMessage.details,
 		);
 		this._refreshFinalizedContext();
+		const receipt = this._messageReceipts.get(appMessage);
+		this._messageReceipts.delete(appMessage);
+		if (receipt) this._acceptDelivery(receipt);
 		this._emit({ type: "message_start", message: appMessage });
 		this._emit({ type: "message_end", message: appMessage });
 	}
@@ -4236,6 +4271,12 @@ export class AgentSession {
 				isIdle: () => this.isIdle,
 				isProjectTrusted: () => this.settingsManager.isProjectTrusted(),
 				getSignal: () => this.agent.signal,
+				foreground: this._foreground,
+				onToolResultCommitted: (id, receipt) => {
+					const receipts = this._toolResultReceipts.get(id) ?? [];
+					receipts.push(receipt);
+					this._toolResultReceipts.set(id, receipts);
+				},
 				abort: () => {
 					if (this._extensionAbortHandler) {
 						this._extensionAbortHandler();

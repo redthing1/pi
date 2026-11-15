@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added `ctx.foreground` for bounded, releasable waits and callbacks to acknowledge delivered results.
+
 - Added `/contextwindow` to set a session context budget with decimal or binary token suffixes.
 - Shell failures expose exit status separately from output; `ShellExecutionError` preserves separate diagnostics for interrupted executions.
 - Exported `renderShellCommand` for readable command headings with aligned continuation lines.
