@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- Foreground wait callers can distinguish an expired wait from a retry that cannot start.
 - Fixed `/retry` failing with `Cannot continue from message role: assistant` after a failed or interrupted response. Manual retries now preserve history and completed tool results while omitting the failed attempt from model context.
 - Keep custom shell results visible outside compact exploration groups.
 - Escape terminal controls in notifications, labels, tool and assistant display text, and compact views without changing operational data.

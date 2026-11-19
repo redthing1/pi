@@ -1294,8 +1294,10 @@ pi.on("tool_call", (event, ctx) => {
 
 `ctx.foreground.wait({ ready, subscribe, signal, timeoutMs?, passive? })` waits for
 a condition with automatic subscription cleanup. It returns `ready`, `timeout`,
-`released`, `steering`, or `aborted`. Passive waits share a 30-second allowance per
-run; `passive: false` gives an executing operation its own bounded foreground wait.
+`skipped`, `released`, `steering`, or `aborted`. Passive waits share a 30-second
+allowance per run. A wait that cannot start because the allowance is spent or the
+user released it returns `skipped`. Use `passive: false` for an executing operation
+with its own bounded foreground wait.
 `ctx.foreground.release()` releases all current waits without stopping their work.
 Extensions retain ownership of execution and cancellation.
 

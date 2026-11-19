@@ -1,6 +1,6 @@
 export const FOREGROUND_WAIT_MS = 30_000;
 
-export type ForegroundWaitOutcome = "ready" | "timeout" | "released" | "steering" | "aborted";
+export type ForegroundWaitOutcome = "ready" | "timeout" | "skipped" | "released" | "steering" | "aborted";
 
 export interface ForegroundWaitOptions {
 	ready(): boolean;
@@ -27,7 +27,7 @@ export class ForegroundController implements ForegroundControl {
 	private readonly pending = new Set<PendingWait>();
 	private remaining = FOREGROUND_WAIT_MS;
 	private waitingSince?: number;
-	private deferred?: "released" | "steering";
+	private deferred?: "skipped" | "steering";
 
 	begin(): void {
 		for (const wait of [...this.pending]) wait.finish("aborted");
@@ -39,7 +39,7 @@ export class ForegroundController implements ForegroundControl {
 	release(): number {
 		const waits = [...this.pending];
 		if (!waits.length) return 0;
-		this.deferred = "released";
+		this.deferred = "skipped";
 		for (const wait of waits) wait.finish("released");
 		return waits.length;
 	}
@@ -58,7 +58,7 @@ export class ForegroundController implements ForegroundControl {
 		if (options.ready()) return Promise.resolve("ready");
 		if (passive && this.deferred) return Promise.resolve(this.deferred);
 		const budget = this.budget();
-		if (passive && budget <= 0) return Promise.resolve("timeout");
+		if (passive && budget <= 0) return Promise.resolve("skipped");
 
 		return new Promise<ForegroundWaitOutcome>((resolve, reject) => {
 			let settled = false;
@@ -121,7 +121,7 @@ export class ForegroundController implements ForegroundControl {
 							check();
 							finish("timeout");
 						},
-						passive ? Math.min(timeout, budget) : timeout,
+						Math.ceil(passive ? Math.min(timeout, budget) : timeout),
 					);
 					if (options.signal?.aborted) abort();
 					else check();

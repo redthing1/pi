@@ -56,7 +56,7 @@ describe("foreground waits", () => {
 		await vi.advanceTimersByTimeAsync(1);
 		expect(await second).toBe("timeout");
 		expect(await parallel).toBe("timeout");
-		expect(await f.controller.wait(f.options)).toBe("timeout");
+		expect(await f.controller.wait(f.options)).toBe("skipped");
 		expect(f.listeners.size).toBe(0);
 		expect(vi.getTimerCount()).toBe(0);
 	});
@@ -68,7 +68,7 @@ describe("foreground waits", () => {
 		expect(f.controller.release()).toBe(2);
 		expect(await command).toBe("released");
 		expect(await child).toBe("released");
-		expect(await f.controller.wait(f.options)).toBe("released");
+		expect(await f.controller.wait(f.options)).toBe("skipped");
 		f.finish();
 		expect(await f.controller.wait(f.options)).toBe("ready");
 		expect(f.listeners.size).toBe(0);
